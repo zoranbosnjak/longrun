@@ -39,6 +39,7 @@ scenarios =
     , ("procproc", procproc)
     , ("autoStop1", autoStop1)
     , ("autoStop2", autoStop2)
+    , ("term", term)
     ]
 
 -- | Regular task with failure or without
@@ -131,3 +132,9 @@ autoStop2 = do
     c2 <- asks procChilds >>= runIO . atomically . readTVar
     logM INFO $ "c2: " ++ show (Set.size c2)
 
+-- | Termination
+term :: Process ()
+term = do
+    _ <- spawnProcess "proc" $ do
+        logM INFO "will stop now"
+    rest

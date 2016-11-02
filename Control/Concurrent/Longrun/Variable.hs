@@ -29,35 +29,32 @@ module Control.Concurrent.Longrun.Variable where
 
 import Control.DeepSeq (NFData)
 import Control.Concurrent.STM
-import Control.Monad.Trans.Reader
 
 import Control.Concurrent.Longrun.Base
 
-data Var a = Var ProcNames (TVar a)
+data Var a = Var ProcName (TVar a)
 data GetEnd a = GetEnd (Var a)
 data SetEnd a = SetEnd (Var a)
 
 -- | Create new variable.
 newVar :: (Show a) => ProcName -> a -> Process (Var a)
 newVar name val = group name $ do
-    varName <- asks procName
-    trace $ "newVar " ++ show varName ++ ", initial: " ++ show val
+    trace $ "newVar, initial: " ++ show val
     var <- runIO $ newTVarIO val
-    return $ Var varName var
+    return $ Var name var
 
 -- | Bind existing TVar to a variable
 newVarBind :: (Show a) => ProcName -> (TVar a) -> Process (Var a)
 newVarBind name var = group name $ do
-    varName <- asks procName
     val <- runIO $ atomically $ readTVar var
-    trace $ "newVarBind " ++ show varName ++ ", initial: " ++ show val
-    return $ Var varName var
+    trace $ "newVarBind, initial: " ++ show val
+    return $ Var name var
 
 -- | Get variable content.
 getVar :: (Show a) => GetEnd a -> Process a
-getVar (GetEnd (Var name var)) = do
+getVar (GetEnd (Var name var)) = group name $ do
     val <- runIO $ atomically $ readTVar var
-    trace $ "getVar " ++ show name ++ ", value: " ++ show val
+    trace $ "getVar, value: " ++ show val
     return val
 
 -- | Get variable content (operate on Var instead on GetEnd)
@@ -66,9 +63,9 @@ getVar' = getVar . GetEnd
 
 -- | Set variable content (evaluated).
 setVar :: (Show a, NFData a) => SetEnd a -> a -> Process ()
-setVar (SetEnd (Var name var)) val = do
+setVar (SetEnd (Var name var)) val = group name $ do
     val' <- force val
-    trace $ "setVar " ++ show name ++ ", value: " ++ show val'
+    trace $ "setVar, value: " ++ show val'
     runIO $ atomically $ writeTVar var val'
  
 -- | Set variable content (operate on Var instead of SetEnd)
@@ -77,13 +74,13 @@ setVar' = setVar . SetEnd
 
 -- | Modify variable content.
 modifyVar :: (Show a, NFData a) => Var a -> (a -> a) -> Process (a,a)
-modifyVar (Var name var) f = do
+modifyVar (Var name var) f = group name $ do
     (oldValue, newValue) <- runIO $ atomically $ do
         a <- readTVar var
         modifyTVar var f
         b <- readTVar var
         return (a,b)
     newValue' <- force newValue
-    trace $ "modifyVar " ++ show name ++ ": " ++ show oldValue ++ " -> " ++ show newValue'
+    trace $ "modifyVar: " ++ show oldValue ++ " -> " ++ show newValue'
     return (oldValue, newValue')
 

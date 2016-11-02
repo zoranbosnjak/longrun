@@ -70,7 +70,7 @@ waitCatch (Subprocess a) = do
 -- | Spawn a subprocess that shall not terminate by itself.
 spawnProcess :: ProcName -> Process a -> Process (Subprocess ())
 spawnProcess name action = do
-    trace $ "spawnProcess " ++ show name
+    group name $ trace "spawnProcess"
     parent <- liftIO $ Control.Concurrent.myThreadId
     a <- spawnTask name $ do
         cfg <- ask
@@ -78,7 +78,7 @@ spawnProcess name action = do
         addChild $ Child (Subprocess b)
         _ <- liftIO $ A.waitCatch b
         removeChild $ Child (Subprocess b)
-        trace $ "process " ++ show (procName cfg) ++ "terminated."
+        trace $ "process terminated"
         liftIO $ Control.Concurrent.killThread parent
     return a
 
