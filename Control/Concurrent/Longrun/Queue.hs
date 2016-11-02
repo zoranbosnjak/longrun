@@ -29,13 +29,14 @@ module Control.Concurrent.Longrun.Queue where
 
 import Control.DeepSeq (NFData)
 import Control.Concurrent.STM
-import Control.Monad.Trans.Reader
 
 import Control.Concurrent.Longrun.Base
 
-data Queue a
-    = QUnbounded ProcNames (TQueue a)
-    | QBounded ProcNames (TBQueue a)
+data Queue a = Queue 
+    { qName     :: ProcName
+    , qRead     :: STM a
+    , qRwite    :: a -> STM ()
+    }
 
 data ReadEnd a = ReadEnd (Queue a)
 data WriteEnd a = WriteEnd (Queue a)
@@ -43,16 +44,16 @@ data WriteEnd a = WriteEnd (Queue a)
 -- | Create new queue.
 newQueue :: Maybe Int -> ProcName -> Process (Queue a)
 newQueue mBound name = group name $ do
-    qName <- asks procName
-    case mBound of
+    (readFunc, writeFunc) <- case mBound of
         Nothing -> do
-            trace $ "newQueue (unbounded) " ++ show qName
+            trace $ "newQueue (unbounded)"
             q <- runIO $ newTQueueIO
-            return $ QUnbounded qName q
+            return $ (readTQueue q, writeTQueue q)
         Just bound -> do
-            trace $ "newQueue (bounded: " ++ show bound ++ ") " ++ show qName
+            trace $ "newQueue (bounded " ++ show bound ++ ")"
             q <- runIO $ newTBQueueIO bound
-            return $ QBounded qName q
+            return $ (readTBQueue q, writeTBQueue q)
+    return $ Queue name readFunc writeFunc
 
 -- | Create one element bounded queue.
 newQueue1 :: ProcName -> Process (Queue a)
@@ -60,11 +61,9 @@ newQueue1 = newQueue (Just 1)
 
 -- | Read data from the queue.
 readQueue :: (Show a) => ReadEnd a -> Process a
-readQueue (ReadEnd q) = do
-    (name,val) <- runIO $ atomically $ case q of
-        QUnbounded name q' -> readTQueue q' >>= \val -> return (name, val)
-        QBounded name q' -> readTBQueue q' >>= \val -> return (name, val)
-    trace $ "readQueue " ++ show name ++ ", value: " ++ show val
+readQueue (ReadEnd (Queue name readFunc _writeFunc)) = group name $ do
+    val <- runIO $ atomically readFunc
+    trace $ "readQueue, value: " ++ show val
     return val
 
 -- | Read data from the queue (operate on Queue instead of ReadEnd).
@@ -73,12 +72,10 @@ readQueue' = readQueue . ReadEnd
 
 -- | Write data to the queue.
 writeQueue :: (Show a, NFData a) => WriteEnd a -> a -> Process ()
-writeQueue (WriteEnd q) val = do
+writeQueue (WriteEnd (Queue name _readFunc writeFunc)) val = group name $ do
     val' <- force val
-    name <- runIO $ atomically $ case q of
-        QUnbounded name q' -> writeTQueue q' val' >> return name
-        QBounded name q' -> writeTBQueue q' val' >> return name
-    trace $ "writeQueue " ++ show name ++ ", value: " ++ show val'
+    runIO $ atomically $ writeFunc val'
+    trace $ "writeQueue, value: " ++ show val'
 
 -- | Write data to the queue (operate on Queue instead of WriteEnd)
 writeQueue' :: (Show a, NFData a) => Queue a -> a -> Process ()

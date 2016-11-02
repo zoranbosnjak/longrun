@@ -129,11 +129,15 @@ logM prio s = do
 
 -- | Raise action to a new level of process name.
 group :: ProcName -> Process a -> Process a
-group name action = do
-    trace $ "group: " ++ show name
-    local f action 
-    where
-        f cfg = cfg {procName = (name:(procName cfg))}
+group name action = local f action where
+    f cfg = cfg {procName = (name:(procName cfg))}
+
+-- | Remove one level of process name.
+ungroup :: Process a -> Process a
+ungroup action = local f action where
+   f cfg = cfg {procName = strip (procName cfg)}
+   strip [] = []
+   strip x = tail x
 
 getChilds :: Process [Child]
 getChilds = do
