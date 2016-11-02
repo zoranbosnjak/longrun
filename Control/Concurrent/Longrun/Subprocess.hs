@@ -63,7 +63,9 @@ spawnTask name action = group name $ do
 waitCatch :: Subprocess a -> Process (Either SomeException a)
 waitCatch (Subprocess a) = do
     trace "waitCatch"
-    liftIO $ A.waitCatch a
+    rv <- liftIO $ A.waitCatch a
+    removeChild $ Child (Subprocess a)
+    return rv
 
 -- | Spawn a subprocess that shall not terminate by itself.
 spawnProcess :: ProcName -> Process a -> Process (Subprocess ())
@@ -71,10 +73,12 @@ spawnProcess name action = do
     trace $ "spawnProcess " ++ show name
     parent <- liftIO $ Control.Concurrent.myThreadId
     a <- spawnTask name $ do
-        pName <- asks procName
-        b <- spawnTask name action
-        _ <- waitCatch b
-        trace $ "process " ++ show pName ++ "terminated."
+        cfg <- ask
+        b <- liftIO $ A.async $ runProcess cfg action
+        addChild $ Child (Subprocess b)
+        _ <- liftIO $ A.waitCatch b
+        removeChild $ Child (Subprocess b)
+        trace $ "process " ++ show (procName cfg) ++ "terminated."
         liftIO $ Control.Concurrent.killThread parent
     return a
 
