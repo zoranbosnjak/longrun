@@ -38,7 +38,7 @@ data GetEnd a = GetEnd (Var a)
 data SetEnd a = SetEnd (Var a)
 
 -- | Create new variable.
-newVar :: (Show a) => String -> a -> Process (Var a)
+newVar :: (Show a) => ProcName -> a -> Process (Var a)
 newVar name val = group name $ do
     varName <- asks procName
     trace $ "newVar " ++ show varName ++ ", initial: " ++ show val
@@ -46,7 +46,7 @@ newVar name val = group name $ do
     return $ Var varName var
 
 -- | Bind existing TVar to a variable
-newVarBind :: (Show a) => String -> (TVar a) -> Process (Var a)
+newVarBind :: (Show a) => ProcName -> (TVar a) -> Process (Var a)
 newVarBind name var = group name $ do
     varName <- asks procName
     val <- runIO $ atomically $ readTVar var

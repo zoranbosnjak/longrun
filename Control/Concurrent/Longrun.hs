@@ -29,10 +29,11 @@ module Control.Concurrent.Longrun
     ( module Control.Concurrent.Longrun.Base
     , module Control.Concurrent.Longrun.Subprocess
     , module Control.Concurrent.Longrun.Variable
-
+    , module Control.Concurrent.Longrun.Queue
     ) where
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
 import Control.Concurrent.Longrun.Variable
+import Control.Concurrent.Longrun.Queue
 
