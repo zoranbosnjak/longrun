@@ -35,6 +35,7 @@ module Control.Concurrent.Longrun.Base
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
@@ -44,9 +45,10 @@ import System.Log.Logger (Priority(..))
 import qualified System.Log.Logger as Log
 
 type ProcName = String
+type ProcNames = [ProcName]
 
 data ProcConfig = ProcConfig
-    { procName      :: [ProcName]
+    { procName      :: ProcNames
     , procChilds    :: TVar (Set Child)
     }
 
@@ -90,6 +92,10 @@ trace _s = do
     logM DEBUG _s
 #endif
     return ()
+
+-- | Force expression evaluation
+force :: (NFData a) => a -> Process a
+force = liftIO . Control.Exception.evaluate . Control.DeepSeq.force
 
 -- | Forever implementation from Control.Monad in combination with transformers 
 -- has some problem with memory leak, use this version instead
