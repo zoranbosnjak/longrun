@@ -202,7 +202,10 @@ emptyConfig = do
 -- | Aquire resources, run action, release resources (bracket wrapper).
 bracket :: Process res -> (res -> Process b) -> (res -> Process c) -> Process c
 bracket aquire release action = do
-    cfg <- ask
+    cfg <- do
+        name <- asks procName
+        cfg <- liftIO $ emptyConfig
+        return $ cfg {procName = name}
     let run = runProcess cfg
         aquire' = run aquire
         release' = run . release
@@ -212,7 +215,10 @@ bracket aquire release action = do
 -- | Run action, then cleanup (finally wrapper).
 finally :: Process a -> Process b -> Process a
 finally action cleanup = do
-    cfg <- ask
+    cfg <- do
+        name <- asks procName
+        cfg <- liftIO $ emptyConfig
+        return $ cfg {procName = name}
     let run = runProcess cfg
         action' = run action
         cleanup' = run cleanup
