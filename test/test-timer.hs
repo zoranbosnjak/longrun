@@ -67,7 +67,8 @@ timLoop = do
 
     forever $ do
         _ <- restartTimer t
-        sleep 0.5
+        nop
+        --sleep 0.001
     
 -- | Expire timer.
 timExpire :: Process ()

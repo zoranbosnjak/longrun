@@ -98,8 +98,11 @@ force :: (NFData a) => a -> Process a
 force = liftIO . Control.Exception.evaluate . Control.DeepSeq.force
 
 -- | Forever implementation from Control.Monad in combination with transformers 
--- has some problem with memory leak, use this version instead
-forever :: Monad m => m a -> m b
+-- has some problem with memory leak, use this version instead.
+-- Make sure to keep type signature "forever :: Process () -> Process ()".
+-- For example, if the type signature is generalized to "forever :: Monad m => m a -> m b",
+-- as suggested by ght, the function still leaks memory.
+forever :: Process () -> Process ()
 forever act = act >> forever act
 
 -- | Delay for a number of seconds
@@ -151,7 +154,7 @@ modifyChilds f = do
     var <- asks procChilds
     liftIO $ atomically $ do
         childs <- readTVar var
-        writeTVar var $ f childs
+        writeTVar var $! f childs
 
 -- | Add child to process config.
 addChild :: Child -> Process ()

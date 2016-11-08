@@ -40,6 +40,8 @@ scenarios =
     , ("autoStop1", autoStop1)
     , ("autoStop2", autoStop2)
     , ("term", term)
+    , ("inLoop1", inLoop1)
+    , ("inLoop2", inLoop2)
     ]
 
 -- | Regular task with failure or without
@@ -138,3 +140,21 @@ term = do
     _ <- spawnProcess "proc" $ do
         logM INFO "will stop now"
     rest
+
+inLoop1 :: Process ()
+inLoop1 = do
+    t <- spawnTask "tsk" $ do
+        sleep 0.2
+        nop
+    forever $ do
+        sleep 0.00001
+        stop t
+
+inLoop2 :: Process ()
+inLoop2 = forever $ do
+    t <- spawnTask "tsk" $ do
+        sleep 0.2
+        nop
+    sleep 0.00001
+    stop t
+    
