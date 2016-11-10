@@ -25,6 +25,8 @@
 --
 -----------------------------------------------------------
 
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+
 module Control.Concurrent.Longrun.Subprocess where
 
 import Control.Concurrent
@@ -39,7 +41,7 @@ import Control.Concurrent.Longrun.Base
 
 -- | All subprocesses will automatically terminate,
 -- if the parent process terminates.
-data Subprocess a = Subprocess (A.Async a)
+data Subprocess a = Subprocess !(A.Async a)
 instance Terminator (Subprocess a) where
     getTid (Subprocess a) = A.asyncThreadId a
     terminate (Subprocess a) = A.cancel a

@@ -17,7 +17,8 @@ main = do
     args <- getArgs
 
     -- setup console logging
-    updateGlobalLogger rootLoggerName (System.Log.Logger.setLevel DEBUG . removeHandler)
+    updateGlobalLogger rootLoggerName 
+        (System.Log.Logger.setLevel DEBUG . removeHandler)
     hConsole <- verboseStreamHandler stdout DEBUG
     updateGlobalLogger rootLoggerName (addHandler hConsole)
 

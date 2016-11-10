@@ -27,6 +27,7 @@
 
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Control.Concurrent.Longrun.Base
     ( module Control.Concurrent.Longrun.Base
@@ -48,11 +49,11 @@ type ProcName = String
 type ProcNames = [ProcName]
 
 data ProcConfig = ProcConfig
-    { procName      :: ProcNames
-    , procChilds    :: TVar (Set Child)
+    { procName      :: !ProcNames
+    , procChilds    :: !(TVar (Set Child))
     }
 
-data ProcState = ProcState [Child]
+data ProcState = ProcState ![Child]
 
 data Child = forall a . (Terminator a) => Child a
 
@@ -100,8 +101,9 @@ force = liftIO . Control.Exception.evaluate . Control.DeepSeq.force
 -- | Forever implementation from Control.Monad in combination with transformers 
 -- has some problem with memory leak, use this version instead.
 -- Make sure to keep type signature "forever :: Process () -> Process ()".
--- For example, if the type signature is generalized to "forever :: Monad m => m a -> m b",
--- as suggested by ght, the function still leaks memory.
+-- For example, if the type signature is generalized to 
+-- "forever :: Monad m => m a -> m b",as suggested by ght, 
+-- the function still leaks memory.
 forever :: Process () -> Process ()
 forever act = act >> forever act
 
@@ -128,7 +130,7 @@ logM prio s = do
             nowSec = formatTime defaultTimeLocale timeFormatUnixEpoch now
             f [] = ""
             f x = foldr1 (\a b -> a++"."++b) (reverse x)
-        Log.logM (f name) prio $ s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
+        Log.logM (f name) prio $! s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
 
 -- | Raise action to a new level of process name.
 group :: ProcName -> Process a -> Process a

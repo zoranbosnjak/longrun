@@ -25,6 +25,8 @@
 --
 -----------------------------------------------------------
 
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+
 module Control.Concurrent.Longrun.Timer where
 
 import Control.Concurrent.MVar
@@ -33,7 +35,8 @@ import Control.Monad
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
 
-data Timer = Timer ProcName Double (Process ()) (MVar (Maybe (Subprocess ())))
+data Timer = 
+    Timer !ProcName !Double !(Process ()) !(MVar (Maybe (Subprocess ())))
 
 -- | Create new timer.
 newTimer :: ProcName -> Double -> Process () -> Process Timer

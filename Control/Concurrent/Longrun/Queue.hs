@@ -25,6 +25,8 @@
 --
 -----------------------------------------------------------
 
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+
 module Control.Concurrent.Longrun.Queue where
 
 import Control.DeepSeq (NFData)
@@ -33,13 +35,13 @@ import Control.Concurrent.STM
 import Control.Concurrent.Longrun.Base
 
 data Queue a = Queue 
-    { qName     :: ProcName
-    , qRead     :: STM a
-    , qRwite    :: a -> STM ()
+    { qName     :: !ProcName
+    , qRead     :: !(STM a)
+    , qRwite    :: !(a -> STM ())
     }
 
-data ReadEnd a = ReadEnd (Queue a)
-data WriteEnd a = WriteEnd (Queue a)
+data ReadEnd a = ReadEnd !(Queue a)
+data WriteEnd a = WriteEnd !(Queue a)
 
 -- | Create new queue.
 newQueue :: Maybe Int -> ProcName -> Process (Queue a)

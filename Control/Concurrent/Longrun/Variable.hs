@@ -25,6 +25,8 @@
 --
 -----------------------------------------------------------
 
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+
 module Control.Concurrent.Longrun.Variable where
 
 import Control.DeepSeq (NFData)
@@ -32,9 +34,9 @@ import Control.Concurrent.STM
 
 import Control.Concurrent.Longrun.Base
 
-data Var a = Var ProcName (TVar a)
-data GetEnd a = GetEnd (Var a)
-data SetEnd a = SetEnd (Var a)
+data Var a = Var !ProcName !(TVar a)
+data GetEnd a = GetEnd !(Var a)
+data SetEnd a = SetEnd !(Var a)
 
 -- | Create new variable.
 newVar :: (Show a) => ProcName -> a -> Process (Var a)
