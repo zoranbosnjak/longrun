@@ -34,6 +34,7 @@ scenarios =
     , ("tim2", tim2)
     , ("timLoop", timLoop)
     , ("timExpire", timExpire)
+    , ("timException", timException)
     ]
 
 -- | Basic timer
@@ -83,3 +84,13 @@ timExpire = do
     _ <- expireTimer t
     logM INFO "stop"
     
+-- | Terminate parent.
+timException :: Process ()
+timException = do
+    logM INFO "hello"
+    t <- newTimer "timer" 1 $ do
+        logM INFO "expired"
+        die
+    _ <- restartTimer t
+    rest
+

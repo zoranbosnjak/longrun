@@ -29,8 +29,9 @@
 
 module Control.Concurrent.Longrun.Timer where
 
-import Control.Concurrent.MVar
+import Control.Concurrent
 import Control.Monad
+import Control.Monad.IO.Class
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
@@ -48,8 +49,9 @@ newTimer name seconds action = group name $ do
 -- | (Re)start timer.
 restartTimer :: Timer -> Process Bool
 restartTimer (Timer name seconds action var) = group name $ do
+    parent <- liftIO $ Control.Concurrent.myThreadId
 
-    -- stop timer first and take MVar
+    -- take MVar, stop timer
     running <- do
         ma <- runIO $ takeMVar var
         case ma of
@@ -58,13 +60,17 @@ restartTimer (Timer name seconds action var) = group name $ do
                 stop a
                 return True
 
-    -- start delayed task and put MVar
+    -- start delayed task, put MVar
     d <- spawnTask "delayed" $ ungroup $ do
         sleep seconds
         _ <- runIO $ takeMVar var
         trace "timer expired"
-        action
+        a <- spawnTask "action" $ ungroup $ action
+        rv <- waitCatch a
         runIO $ putMVar var Nothing
+        case rv of
+            Left e -> liftIO $ Control.Concurrent.throwTo parent e
+            Right _ -> return ()
     runIO $ putMVar var $ Just d
 
     trace $ "restartTimer, was running: " ++ show running
