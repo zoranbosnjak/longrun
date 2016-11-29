@@ -30,71 +30,92 @@
 module Control.Concurrent.Longrun.Timer where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Monad
-import Control.Monad.IO.Class
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
 
-data Timer = 
-    Timer !ProcName !Double !(Process ()) !(MVar (Maybe (Subprocess ())))
+data Timer = Timer
+    { tParent   :: !ThreadId
+    , tName     :: !ProcName
+    , tTimeout  :: !Double
+    , tAction   :: !(Process ()) 
+    , tRunning  :: !(TVar (Maybe (Subprocess ())))
+    , tExpired  :: !(TVar Bool)
+    }
 
 -- | Create new timer.
 newTimer :: ProcName -> Double -> Process () -> Process Timer
 newTimer name seconds action = group name $ do
     trace $ "newTimer, seconds: " ++ show seconds
-    var <- runIO $ newMVar Nothing
-    return $ Timer name seconds action var
+    parent <- runIO $ Control.Concurrent.myThreadId
+    running <- runIO $ newTVarIO Nothing
+    expired <- runIO $ newTVarIO False
+    return $ Timer 
+        { tParent = parent
+        , tName = name
+        , tTimeout = seconds
+        , tAction = action
+        , tRunning = running
+        , tExpired = expired
+        }
+
+_manipulateTimer :: Timer -> Process a -> Process a
+_manipulateTimer t manipulator = group (tName t) $ do
+    -- timer manipulation is only possible from the same parent
+    parent <- runIO $ Control.Concurrent.myThreadId
+    -- TODO: for some reason, this assertion leaks memory
+    --assert (parent == tParent t) "wrong caller"
+    manipulator
+
+_stopTimer :: Timer -> Process Bool
+_stopTimer t = do
+    (running, expired) <- runIO $ atomically $ do
+        running <- readTVar $ tRunning t
+        expired <- readTVar $ tExpired t
+        writeTVar (tRunning t) Nothing
+        writeTVar (tExpired t) False
+        return (running, expired)
+    case running of
+        Nothing -> return False
+        Just a -> do
+            stop_ a
+            return (not expired)
 
 -- | (Re)start timer.
 restartTimer :: Timer -> Process Bool
-restartTimer (Timer name seconds action var) = group name $ do
-    parent <- liftIO $ Control.Concurrent.myThreadId
+restartTimer t = _manipulateTimer t $ do
+    parent <- runIO $ Control.Concurrent.myThreadId
+    wasRunning <- _stopTimer t
 
-    -- take MVar, stop timer
-    running <- do
-        ma <- runIO $ takeMVar var
-        case ma of
-            Nothing -> return False
-            Just a -> do
-                stop a
-                return True
-
-    -- start delayed task, put MVar
+    -- start delayed task
     d <- spawnTask "delayed" $ ungroup $ do
-        sleep seconds
-        _ <- runIO $ takeMVar var
+        sleep $ tTimeout t
         trace "timer expired"
-        a <- spawnTask "action" $ ungroup $ action
-        rv <- waitCatch a
-        runIO $ putMVar var Nothing
-        case rv of
-            Left e -> liftIO $ Control.Concurrent.throwTo parent e
-            Right _ -> return ()
-    runIO $ putMVar var $ Just d
+        runIO $ atomically $ writeTVar (tExpired t) True
+        mask_ $ tAction t `onFailureSignal` parent
 
-    trace $ "restartTimer, was running: " ++ show running
-    return running
+    runIO $ atomically $ writeTVar (tRunning t) $ Just d
+    trace $ "restartTimer, was running: " ++ show wasRunning
+    return wasRunning
 
 -- | Stop timer.
 stopTimer :: Timer -> Process Bool
-stopTimer (Timer name _seconds _action var) = group name $ do
-    running <- do
-        ma <- runIO $ takeMVar var
-        case ma of
-            Nothing -> return False
-            Just a -> do
-                stop a
-                return True
-    runIO $ putMVar var Nothing
-    trace $ "stopTimer, was running: " ++ show running
-    return running
+stopTimer t = _manipulateTimer t $ do
+    wasRunning <- _stopTimer t
+    trace $ "stopTimer, was running: " ++ show wasRunning
+    return wasRunning
 
 -- | Expedite timer expire if running.
 expireTimer :: Timer -> Process Bool
-expireTimer t@(Timer name _seconds action _var) = group name $ do
-    running <- ungroup $ stopTimer t
-    when running action
-    trace $ "expireTimer, was running: " ++ show running
-    return running
+expireTimer t = _manipulateTimer t $ do
+    parent <- runIO $ Control.Concurrent.myThreadId
+    wasRunning <- _stopTimer t
+    when wasRunning $ do
+        _ <- spawnTask "action" $ ungroup $ do
+            mask_ $ tAction t `onFailureSignal` parent
+        return ()
+    trace $ "expireTimer, was running: " ++ show wasRunning
+    return wasRunning
 

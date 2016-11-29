@@ -85,9 +85,18 @@ spawnProcess name action = do
     return a
 
 -- | Stop a subprocess, remove it from the list of childs.
-stop :: Subprocess a -> Process ()
+-- Return running status, just before call to stop.
+stop :: Subprocess a -> Process Bool
 stop (Subprocess a) = do
     trace "stop"
     removeChild $ Child (Subprocess a)
     liftIO $ A.cancel a
+    rv <- liftIO $ A.waitCatch a
+    case rv of
+        Left _ -> return True
+        Right _ -> return False
+
+-- | Stop a subprocess, don't care about running state
+stop_ :: Subprocess a -> Process ()
+stop_ p = stop p >>= \_ -> return ()
 

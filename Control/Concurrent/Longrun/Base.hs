@@ -55,7 +55,7 @@ data ProcConfig = ProcConfig
 
 data ProcState = ProcState ![Child]
 
-data Child = forall a . (Terminator a) => Child a
+data Child = forall a . (Terminator a) => Child !a
 
 -- | An interface for items that can be terminated.
 class Terminator a where
@@ -175,10 +175,15 @@ runIO :: IO a -> Process a
 runIO = liftIO
 
 -- | Terminate self.
-die :: Process ()
-die = do
-    trace "die"
+die :: String -> Process ()
+die reason = do
+    trace reason
     liftIO $ (Control.Concurrent.myThreadId >>= Control.Concurrent.killThread)
+
+-- | Assert the condition is true.
+assert :: Bool -> String -> Process ()
+assert True _ = return ()
+assert False err = die $ "assertion error: " ++ err
 
 -- | Run application.
 runApp :: Process a -> IO a
@@ -229,6 +234,15 @@ finally action cleanup = do
         cleanup' = run cleanup
     runIO $ Control.Exception.finally action' cleanup'
 
+-- | Try to run an action (try wrapper).
+try :: Exception e => Process a -> Process (Either e a)
+try action = do
+    cfg <- do
+        name <- asks procName
+        cfg <- liftIO $ emptyConfig
+        return $ cfg {procName = name}
+    runIO $ Control.Exception.try (runProcess cfg action)
+
 -- Empty operation.
 nop :: Process ()
 nop = return ()
@@ -238,4 +252,21 @@ rest :: Process ()
 rest = do
     trace "rest"
     forever $ liftIO $ threadDelaySec 1
+
+-- | Protect process from being terminated while it's running.
+mask_ :: Process a -> Process a
+mask_ proc = do
+    cfg <- do
+        name <- asks procName
+        cfg <- liftIO $ emptyConfig
+        return $ cfg {procName = name}
+    runIO $ Control.Exception.mask_ $ runProcess cfg proc
+
+-- | Report failure (if any) to the process
+onFailureSignal :: Process () -> ThreadId -> Process ()
+onFailureSignal action proc = do
+    rv <- Control.Concurrent.Longrun.Base.try action
+    case rv of
+        Left e -> runIO $ Control.Concurrent.throwTo proc (e::SomeException)
+        Right _ -> return ()
 

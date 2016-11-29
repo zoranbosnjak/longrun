@@ -1,38 +1,14 @@
-
-module Main where
-
 import Control.Concurrent.STM
 import Control.Monad hiding (forever)
 import Control.Monad.Trans.Reader
 import Data.Set as Set
-import System.Environment (getArgs)
 import System.Log.Logger hiding (logM)
-import System.Log.Handler.Simple
-import System.IO
 
 import Control.Concurrent.Longrun
+import Testrun
 
 main :: IO ()
-main = do
-    args <- getArgs
-
-    -- setup console logging
-    updateGlobalLogger rootLoggerName 
-        (System.Log.Logger.setLevel DEBUG . removeHandler)
-    hConsole <- verboseStreamHandler stdout DEBUG
-    updateGlobalLogger rootLoggerName (addHandler hConsole)
-
-    -- run all tests from command line
-    forM_ args $ \arg -> do
-        putStrLn ""
-        putStrLn $ "running: " ++ show arg
-        let mFunc = lookup arg scenarios
-        case mFunc of
-            Nothing -> error $ show arg ++ " not found."
-            Just func -> runApp func
-
-scenarios :: [(String, Process ())]
-scenarios =
+main = runScenario
     [ ("task1", task False)
     , ("task2", task True)
     , ("taskRepeat", taskRepeat)
@@ -59,13 +35,12 @@ task failFlag = do
 
 -- | Repeat running task, observe memory
 taskRepeat :: Process ()
-taskRepeat = forM_ [(1::Int)..] $ \cnt -> do
+taskRepeat = forM_ [(1::Integer)..] $ \cnt -> do
     t <- spawnTask ("iterration " ++ show cnt) $ do
-        logM INFO "start"
-        sleep 0.01
-        return $ show cnt
+        sleep 0.001
+        return cnt
     rv <- waitCatch t
-    logM INFO $ "result: " ++ show rv
+    logM INFO $ show rv
 
 -- | Regular long running process.
 proc1 :: Process ()
@@ -92,10 +67,10 @@ procproc = forever $ do
 
     sleep 3
     logM INFO "stop p1"
-    stop p1
+    stop_ p1
     sleep 2
     logM INFO "stop p2"
-    stop p2
+    stop_ p2
 
 -- | Implicit childs stop (ver1)
 autoStop1 :: Process ()
@@ -110,7 +85,7 @@ autoStop1 = do
     c1 <- asks procChilds >>= runIO . atomically . readTVar
     logM INFO $ "c1: " ++ show (Set.size c1)
     sleep 0.5
-    stop t
+    stop_ t
     c2 <- asks procChilds >>= runIO . atomically . readTVar
     logM INFO $ "c2: " ++ show (Set.size c2)
     sleep 1
@@ -149,7 +124,7 @@ inLoop1 = do
         nop
     forever $ do
         sleep 0.00001
-        stop t
+        stop_ t
 
 inLoop2 :: Process ()
 inLoop2 = forever $ do
@@ -157,5 +132,5 @@ inLoop2 = forever $ do
         sleep 0.2
         nop
     sleep 0.00001
-    stop t
+    stop_ t
     

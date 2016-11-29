@@ -1,40 +1,19 @@
 
 module Main where
 
-import Control.Monad hiding (forever)
-import System.Environment (getArgs)
 import System.Log.Logger hiding (logM)
-import System.Log.Handler.Simple
-import System.IO
 
 import Control.Concurrent.Longrun
+import Testrun
 
 main :: IO ()
-main = do
-    args <- getArgs
-
-    -- setup console logging
-    updateGlobalLogger rootLoggerName
-        (System.Log.Logger.setLevel DEBUG . removeHandler)
-    hConsole <- verboseStreamHandler stdout DEBUG
-    updateGlobalLogger rootLoggerName (addHandler hConsole)
-
-    -- run all tests from command line
-    forM_ args $ \arg -> do
-        putStrLn ""
-        putStrLn $ "running: " ++ show arg
-        let mFunc = lookup arg scenarios
-        case mFunc of
-            Nothing -> error $ show arg ++ " not found."
-            Just func -> runApp func
-
-scenarios :: [(String, Process ())]
-scenarios =
+main = runScenario
     [ ("tim1", tim1)
     , ("tim2", tim2)
     , ("timLoop", timLoop)
     , ("timExpire", timExpire)
     , ("timException", timException)
+    , ("timRestart", timRestart)
     ]
 
 -- | Basic timer
@@ -90,7 +69,17 @@ timException = do
     logM INFO "hello"
     t <- newTimer "timer" 1 $ do
         logM INFO "expired"
-        die
+        die "terminate"
     _ <- restartTimer t
     rest
+
+-- | Periodic timer restart, check memory.
+timRestart :: Process ()
+timRestart = do
+    t <- newTimer "timer" 0.001 $ do
+        logM INFO "tick"
+        --nop
+    forever $ do
+        _ <- restartTimer t
+        sleep 0.002
 
