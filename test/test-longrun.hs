@@ -34,11 +34,11 @@ long = do
 
     q <- newQueue1 "q"
 
-    _src <- spawnProcess "source" $ forM_ samples $ \x -> do
+    _src <- spawnProcess "source" nop $ forM_ samples $ \x -> do
         writeQueue' q x
         sleep 0.001
 
-    _sink <- spawnProcess "sink" $ forever $ do
+    _sink <- spawnProcess "sink" nop $ forever $ do
         _ <- readQueue' q
         return ()
 

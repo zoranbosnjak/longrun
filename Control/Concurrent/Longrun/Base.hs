@@ -74,25 +74,8 @@ instance Terminator Child where
 
 type Process a = ReaderT ProcConfig IO a
 
-traceIO :: String -> IO ()
-traceIO _s = do
-    -- to console
-#ifdef traceConsole
-    putStrLn _s
-#endif
-    return ()
-
 trace :: String -> Process ()
-trace _s = do
-    -- to console
-#ifdef traceConsole
-    liftIO $ putStrLn _s
-#endif
-    -- to logging
-#ifdef traceLog
-    logM DEBUG _s
-#endif
-    return ()
+trace = logM DEBUG
 
 -- | Force expression evaluation
 force :: (NFData a) => a -> Process a
@@ -197,7 +180,6 @@ runProcess cfg action = process `Control.Exception.finally` cleanup where
     process = runReaderT action cfg
     cleanup = do
         childs <- atomically $ readTVar (procChilds cfg)
-        traceIO $ "cleanup, num. childs: " ++ show (Set.size childs)
         mapM_ terminate $ Set.toList childs
 
 -- | Create empty configuration.

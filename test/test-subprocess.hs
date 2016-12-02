@@ -46,7 +46,7 @@ taskRepeat = forM_ [(1::Integer)..] $ \cnt -> do
 proc1 :: Process ()
 proc1 = do
     logM INFO "startup"
-    _ticker <- spawnProcess "tickerProcess" $ forever $ do
+    _ticker <- spawnProcess "tickerProcess" nop $ forever $ do
         logM INFO "tick"
         sleep 1.0
     rest
@@ -59,11 +59,11 @@ procproc = forever $ do
             logM INFO $ show delta
             sleep delta
         
-    p1 <- spawnProcess "p1" $ do
-        _p1a <- spawnProcess "a" $ forever (f 1.1)
-        _p1b <- spawnProcess "b" $ forever (f 1.11)
+    p1 <- spawnProcess "p1" nop $ do
+        _p1a <- spawnProcess "a" nop $ forever (f 1.1)
+        _p1b <- spawnProcess "b" nop $ forever (f 1.11)
         rest
-    p2 <- spawnProcess "p2" (forever (f 1.2))
+    p2 <- spawnProcess "p2" nop (forever (f 1.2))
 
     sleep 3
     logM INFO "stop p1"
@@ -113,7 +113,7 @@ autoStop2 = do
 -- | Termination
 term :: Process ()
 term = do
-    _ <- spawnProcess "proc" $ do
+    _ <- spawnProcess "proc" (logM ERROR "termination") $ do
         logM INFO "will stop now"
     rest
 

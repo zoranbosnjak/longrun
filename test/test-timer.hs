@@ -40,7 +40,7 @@ tim2 = do
 timLoop :: Process ()
 timLoop = do
     t <- newTimer "timer" 0.1 $ do
-        _sub <- spawnProcess "task" $ forever $ do
+        _sub <- spawnProcess "task" nop $ forever $ do
             logM INFO "task"
             sleep 0.1
         sleep 0.3

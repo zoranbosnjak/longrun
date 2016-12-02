@@ -53,11 +53,11 @@ onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
         -- need another dummy thread to reference 'var',
         -- just to prevent deadlock detection.
         -- TODO: replace this ugly solution to keep var reference alive
-        _ <- spawnProcess "dummy" $ forever $ do
+        _ <- spawnProcess "dummy" nop $ forever $ do
             sleep $ case (var==var) of
                 True -> 1
                 False -> 2
-        p <- ungroup $ spawnProcess procname $ loop initial
+        p <- ungroup $ spawnProcess procname nop $ loop initial
         return $ Child p
       where
         loop x = do
