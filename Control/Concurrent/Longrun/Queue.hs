@@ -37,7 +37,8 @@ import Control.Concurrent.Longrun.Base
 data Queue a = Queue 
     { qName     :: !ProcName
     , qRead     :: !(STM a)
-    , qRwite    :: !(a -> STM ())
+    , qWrite    :: !(a -> STM ())
+    , qTryPeek  :: !(STM (Maybe a))
     }
 
 data ReadEnd a = ReadEnd !(Queue a)
@@ -46,16 +47,16 @@ data WriteEnd a = WriteEnd !(Queue a)
 -- | Create new queue.
 newQueue :: Maybe Int -> ProcName -> Process (Queue a)
 newQueue mBound name = group name $ do
-    (readFunc, writeFunc) <- case mBound of
+    (readFunc, writeFunc, tryPeekFunc) <- case mBound of
         Nothing -> do
             trace $ "newQueue (unbounded)"
             q <- runIO $ newTQueueIO
-            return $ (readTQueue q, writeTQueue q)
+            return $ (readTQueue q, writeTQueue q, tryPeekTQueue q)
         Just bound -> do
             trace $ "newQueue (bounded " ++ show bound ++ ")"
             q <- runIO $ newTBQueueIO bound
-            return $ (readTBQueue q, writeTBQueue q)
-    return $ Queue name readFunc writeFunc
+            return $ (readTBQueue q, writeTBQueue q, tryPeekTBQueue q)
+    return $ Queue name readFunc writeFunc tryPeekFunc
 
 -- | Create one element bounded queue.
 newQueue1 :: ProcName -> Process (Queue a)
@@ -63,8 +64,8 @@ newQueue1 = newQueue (Just 1)
 
 -- | Read data from the queue.
 readQueue :: (Show a) => ReadEnd a -> Process a
-readQueue (ReadEnd (Queue name readFunc _writeFunc)) = group name $ do
-    val <- runIO $ atomically readFunc
+readQueue (ReadEnd q) = group (qName q) $ do
+    val <- runIO $ atomically $ qRead q
     trace $ "readQueue, value: " ++ show val
     return val
 
@@ -74,9 +75,9 @@ readQueue' = readQueue . ReadEnd
 
 -- | Write data to the queue.
 writeQueue :: (Show a, NFData a) => WriteEnd a -> a -> Process ()
-writeQueue (WriteEnd (Queue name _readFunc writeFunc)) val = group name $ do
+writeQueue (WriteEnd q) val = group (qName q) $ do
     val' <- force val
-    runIO $ atomically $ writeFunc val'
+    runIO $ atomically $ (qWrite q) val'
     trace $ "writeQueue, value: " ++ show val'
 
 -- | Write data to the queue (operate on Queue instead of WriteEnd)

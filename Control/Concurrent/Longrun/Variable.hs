@@ -34,7 +34,10 @@ import Control.Concurrent.STM
 
 import Control.Concurrent.Longrun.Base
 
-data Var a = Var !ProcName !(TVar a)
+data Var a = Var 
+    { vName     :: !ProcName
+    , vVar      :: !(TVar a)
+    }
 data GetEnd a = GetEnd !(Var a)
 data SetEnd a = SetEnd !(Var a)
 

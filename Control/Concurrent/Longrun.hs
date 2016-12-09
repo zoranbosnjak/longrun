@@ -34,13 +34,14 @@ module Control.Concurrent.Longrun
     , module Control.Concurrent.Longrun.Timer
     ) where
 
+import Control.Concurrent.Async
+import Control.Concurrent.STM
+
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
 import Control.Concurrent.Longrun.Variable
 import Control.Concurrent.Longrun.Queue
 import Control.Concurrent.Longrun.Timer
-
-import Control.Concurrent.STM
 
 -- | Run single action on each variable change.
 onChangeVar :: (Eq b) =>
@@ -69,4 +70,28 @@ onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
             trace $ "variable " ++ show varname ++ " changed, triggering action"
             act x y
             loop y
+
+-- | Return (Just msg) or Nothing on timeout.
+readQueueTimeout :: ReadEnd a -> Double -> Process (Maybe a)
+readQueueTimeout (ReadEnd q) timeout = runIO $ do
+    expired <- newTVarIO False
+    task <- async $ do
+        threadDelaySec timeout
+        atomically $ writeTVar expired True
+    ready <- atomically $ do
+        val <- qTryPeek q
+        end <- readTVar expired
+        case (end, val) of
+            (True, _) -> return False
+            (False, Just _) -> return True
+            _ -> retry
+    cancel task
+    case ready of
+        False -> return Nothing
+        True -> do
+            msg <- atomically $ qRead q
+            return $ Just msg
+
+readQueueTimeout' :: Queue a -> Double -> Process (Maybe a)
+readQueueTimeout' q = readQueueTimeout (ReadEnd q)
 
