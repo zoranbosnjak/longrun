@@ -1,5 +1,6 @@
 module Utils where
 
+import Control.Exception (SomeException, catch)
 import Control.Concurrent.Longrun (Process, runApp)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Char (isSpace)
@@ -17,19 +18,19 @@ import qualified GHC.Stats as Stats
 import qualified System.Log.Logger as Logger
 import qualified System.Mem as Mem
 
-resetLogger :: IO ()
-resetLogger = do
+resetLogger :: Logger.Priority -> IO ()
+resetLogger priority = do
     Logger.updateGlobalLogger Logger.rootLoggerName
-        (Logger.setLevel Logger.DEBUG . Logger.removeHandler)
+        (Logger.setLevel priority . Logger.removeHandler)
 
-captureLogs :: IO a -> IO ([LogRecord], a)
-captureLogs computation = do
-    resetLogger
+captureLogs :: Logger.Priority -> IO a -> IO ([LogRecord], Either SomeException a)
+captureLogs priority computation = do
+    resetLogger priority
     handler <- inMemoryLogger
     Logger.updateGlobalLogger Logger.rootLoggerName (Logger.addHandler handler)
-    a <- computation
+    a <- catch (Right <$> computation) (return . Left)
     logs <- evacuateLogger handler
-    resetLogger
+    resetLogger Logger.DEBUG
     return (logs, a)
 
 assertLogsWithoutTimeEqual :: [LogRecord] -> [LogRecord] -> Assertion
@@ -39,9 +40,9 @@ assertLogsWithoutTimeEqual value expected =
            msg' = dropWhileEnd isThrowaway $ dropWhileEnd (/= '@') msg
            isThrowaway c = isSpace c || (c == '@')
 
-testLogsOfMatch :: String -> Process () -> [LogRecord] -> Test
-testLogsOfMatch name proc expected = buildTest $ do
-    (logs, _) <- captureLogs $ runApp proc
+testLogsOfMatch :: String -> Logger.Priority -> Process () -> [LogRecord] -> Test
+testLogsOfMatch name priority proc expected = buildTest $ do
+    (logs, _) <- captureLogs priority $ runApp proc
     return $ testCase name $
         assertLogsWithoutTimeEqual logs expected
 
@@ -64,5 +65,6 @@ assertConstantMemory baseIterations maxRatio block = do
         _ <- block
         after <- liftIO $ getUsedMemory
         if after > upperBound
-        then return $ assertString $ "Memory leak found: " ++ show (after, upperBound)
+        then return $ assertString $
+          "Memory leak found in iteration  " ++ show i ++ " " ++ show (after, upperBound)
         else go (i-1) upperBound
