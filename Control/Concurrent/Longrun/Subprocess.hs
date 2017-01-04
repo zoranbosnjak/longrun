@@ -57,8 +57,13 @@ spawnTask name action = group name $ do
             { procName = pName
             , procChilds = var
             }
-    a <- liftIO $ A.async $ runProcess cfg action
+    lock <- liftIO $ newEmptyMVar
+    a <- liftIO $ A.async $ do
+        -- Need to wait for parent to finish updating its state
+        _ <- takeMVar lock
+        runProcess cfg action
     addChild $ Child (Subprocess a)
+    liftIO $ putMVar lock ()
     return $ Subprocess a
 
 -- | Wait for a process to teminate.

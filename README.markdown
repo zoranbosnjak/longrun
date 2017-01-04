@@ -33,6 +33,13 @@ Use regular cabal test command (cabal is already provided by nix)
 
     cabal test [--test-option=--color] [--show-details=always] [testName]
 
+Some tests are repeatedly running the same code and observing for memory leaks.
+You can multiply the number of runs by setting `ITERATION_MULTIPLIER` env
+variable before running the tests. For example this will make the tests run
+100x longer:
+
+    ITERATION_MULTIPLIER=100 cabal test ...
+
 ### Generate documentation
 
 Use regular cabal haddock command (cabal is already provided by nix)
