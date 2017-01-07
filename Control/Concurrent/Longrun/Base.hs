@@ -31,9 +31,40 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Control.Concurrent.Longrun.Base
-    ( module Control.Concurrent.Longrun.Base
-    , Priority(..)
-    ) where
+( Child (Child)
+, Control.Concurrent.Longrun.Base.bracket
+, Control.Concurrent.Longrun.Base.finally
+, Control.Concurrent.Longrun.Base.force
+, Control.Concurrent.Longrun.Base.mask_
+, Control.Concurrent.Longrun.Base.try
+, Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY)
+, ProcConfig (ProcConfig)
+, ProcName
+, Process
+, Terminator
+, addChild
+, assert
+, die
+, emptyConfig
+, forever
+, getChilds
+, getTid
+, group
+, logM
+, nop
+, onFailureSignal
+, procChilds
+, procName
+, removeChild
+, rest
+, runApp
+, runProcess
+, sleep
+, terminate
+, threadDelaySec
+, trace
+, ungroup
+) where
 
 import Control.Concurrent
     (ThreadId, myThreadId, killThread, threadDelay, throwTo)
@@ -57,8 +88,6 @@ data ProcConfig = ProcConfig
     { procName      :: !ProcNames
     , procChilds    :: !(TVar (Set Child))
     }
-
-data ProcState = ProcState ![Child]
 
 data Child = forall a . (Terminator a) => Child !a
 
@@ -159,10 +188,6 @@ removeChild child = do
     trace "removeChild"
     modifyChilds $ Set.delete child
 
--- | Convert IO action to Process.
-runIO :: IO a -> Process a
-runIO = liftIO
-
 -- | Terminate self.
 die :: String -> Process ()
 die reason = do
@@ -210,7 +235,7 @@ bracket aquire release action = do
         aquire' = run aquire
         release' = run . release
         action' = run . action
-    runIO $ Control.Exception.bracket aquire' release' action'
+    liftIO $ Control.Exception.bracket aquire' release' action'
 
 -- | Run action, then cleanup (finally wrapper).
 finally :: Process a -> Process b -> Process a
@@ -222,7 +247,7 @@ finally action cleanup = do
     let run = runProcess cfg
         action' = run action
         cleanup' = run cleanup
-    runIO $ Control.Exception.finally action' cleanup'
+    liftIO $ Control.Exception.finally action' cleanup'
 
 -- | Try to run an action (try wrapper).
 try :: Exception e => Process a -> Process (Either e a)
@@ -231,7 +256,7 @@ try action = do
         name <- asks procName
         cfg <- liftIO $ emptyConfig
         return $ cfg {procName = name}
-    runIO $ Control.Exception.try (runProcess cfg action)
+    liftIO $ Control.Exception.try (runProcess cfg action)
 
 -- Empty operation.
 nop :: Process ()
@@ -250,13 +275,13 @@ mask_ proc = do
         name <- asks procName
         cfg <- liftIO $ emptyConfig
         return $ cfg {procName = name}
-    runIO $ Control.Exception.mask_ $ runProcess cfg proc
+    liftIO $ Control.Exception.mask_ $ runProcess cfg proc
 
 -- | Report failure (if any) to the process
 onFailureSignal :: Process () -> ThreadId -> Process ()
 onFailureSignal action proc = do
     rv <- Control.Concurrent.Longrun.Base.try action
     case rv of
-        Left e -> runIO $ Control.Concurrent.throwTo proc (e::SomeException)
+        Left e -> liftIO $ Control.Concurrent.throwTo proc (e::SomeException)
         Right _ -> return ()
 

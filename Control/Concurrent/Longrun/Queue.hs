@@ -29,12 +29,13 @@
 
 module Control.Concurrent.Longrun.Queue where
 
-import Control.DeepSeq (NFData)
 import Control.Concurrent.STM
+import Control.DeepSeq (NFData)
+import Control.Monad.IO.Class (liftIO)
 
 import Control.Concurrent.Longrun.Base
 
-data Queue a = Queue 
+data Queue a = Queue
     { qName     :: !ProcName
     , qRead     :: !(STM a)
     , qWrite    :: !(a -> STM ())
@@ -50,11 +51,11 @@ newQueue mBound name = group name $ do
     (readFunc, writeFunc, tryPeekFunc) <- case mBound of
         Nothing -> do
             trace $ "newQueue (unbounded)"
-            q <- runIO $ newTQueueIO
+            q <- liftIO $ newTQueueIO
             return $ (readTQueue q, writeTQueue q, tryPeekTQueue q)
         Just bound -> do
             trace $ "newQueue (bounded " ++ show bound ++ ")"
-            q <- runIO $ newTBQueueIO bound
+            q <- liftIO $ newTBQueueIO bound
             return $ (readTBQueue q, writeTBQueue q, tryPeekTBQueue q)
     return $ Queue name readFunc writeFunc tryPeekFunc
 
@@ -65,7 +66,7 @@ newQueue1 = newQueue (Just 1)
 -- | Read data from the queue.
 readQueue :: (Show a) => ReadEnd a -> Process a
 readQueue (ReadEnd q) = group (qName q) $ do
-    val <- runIO $ atomically $ qRead q
+    val <- liftIO $ atomically $ qRead q
     trace $ "readQueue, value: " ++ show val
     return val
 
@@ -77,7 +78,7 @@ readQueue' = readQueue . ReadEnd
 writeQueue :: (Show a, NFData a) => WriteEnd a -> a -> Process ()
 writeQueue (WriteEnd q) val = group (qName q) $ do
     val' <- force val
-    runIO $ atomically $ (qWrite q) val'
+    liftIO $ atomically $ (qWrite q) val'
     trace $ "writeQueue, value: " ++ show val'
 
 -- | Write data to the queue (operate on Queue instead of WriteEnd)

@@ -3,6 +3,7 @@ module TestLongrun (
 ) where
 
 import Control.Monad (forM_)
+import Control.Monad.IO.Class (liftIO)
 import System.Random (newStdGen, randoms)
 import Test.Framework (Test, buildTest, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -40,7 +41,7 @@ testChvar = testLogsOfMatch "variable change" INFO chvar
 testLong :: Test
 testLong = buildTest $ fmap (testCase "long queue pipe") $
     runApp $ do
-        stdGen <- runIO newStdGen
+        stdGen <- liftIO newStdGen
         q <- newQueue1 "q"
 
         _src <- spawnProcess "source" nop $
