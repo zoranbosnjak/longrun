@@ -104,14 +104,14 @@ procproc :: Double -> Process ()
 procproc factor = do
     logM INFO "startup"
     let f delta = do
-            logM INFO $ show delta
             sleep $ delta * factor
+            logM INFO $ show delta
 
     p1 <- spawnProcess "p1" nop $ do
         _p1a <- spawnProcess "a" nop $ forever (f 0.11)
-        _p1b <- spawnProcess "b" nop $ forever (f 0.115)
+        _p1b <- spawnProcess "b" nop $ forever (f 0.12)
         rest
-    p2 <- spawnProcess "p2" nop (forever (f 0.12))
+    p2 <- spawnProcess "p2" nop (forever (f 0.13))
 
     sleep $ 0.3 * factor
     logM INFO "stop p1"
@@ -130,18 +130,14 @@ testProcProc = testGroup "process in process"
 testProcProcLogs :: Test
 testProcProcLogs = testLogsOfMatch "process in process" INFO (procproc 0.1)
     [ (INFO, "startup")
-    , (INFO, "0.12")
     , (INFO, "0.11")
-    , (INFO, "0.115")
-    , (INFO, "0.11")
-    , (INFO, "0.115")
     , (INFO, "0.12")
+    , (INFO, "0.13")
     , (INFO, "0.11")
-    , (INFO, "0.115")
     , (INFO, "0.12")
+    , (INFO, "0.13")
     , (INFO, "stop p1")
-    , (INFO, "0.12")
-    , (INFO, "0.12")
+    , (INFO, "0.13")
     , (INFO, "stop p2")
     ]
 
