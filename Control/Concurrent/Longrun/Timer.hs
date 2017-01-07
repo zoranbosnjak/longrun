@@ -40,7 +40,7 @@ data Timer = Timer
     { tParent   :: !ThreadId
     , tName     :: !ProcName
     , tTimeout  :: !Double
-    , tAction   :: !(Process ()) 
+    , tAction   :: !(Process ())
     , tRunning  :: !(TVar (Maybe (Subprocess ())))
     , tExpired  :: !(TVar Bool)
     }
@@ -52,7 +52,7 @@ newTimer name seconds action = group name $ do
     parent <- runIO $ Control.Concurrent.myThreadId
     running <- runIO $ newTVarIO Nothing
     expired <- runIO $ newTVarIO False
-    return $ Timer 
+    return $ Timer
         { tParent = parent
         , tName = name
         , tTimeout = seconds
@@ -64,7 +64,7 @@ newTimer name seconds action = group name $ do
 _manipulateTimer :: Timer -> Process a -> Process a
 _manipulateTimer t manipulator = group (tName t) $ do
     -- timer manipulation is only possible from the same parent
-    parent <- runIO $ Control.Concurrent.myThreadId
+    _ <- runIO $ Control.Concurrent.myThreadId
     -- TODO: for some reason, this assertion leaks memory
     --assert (parent == tParent t) "wrong caller"
     manipulator
