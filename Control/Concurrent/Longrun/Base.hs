@@ -35,14 +35,17 @@ module Control.Concurrent.Longrun.Base
     ) where
 
 import Control.Concurrent
-import Control.Concurrent.STM
-import Control.DeepSeq
+    (ThreadId, myThreadId, killThread, threadDelay, throwTo)
+import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Control.DeepSeq (NFData, force)
 import Control.Exception
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Reader
+    (Exception, SomeException, bracket, evaluate, finally, mask_, try)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Reader (ReaderT, asks, local, runReaderT)
 import Data.Set as Set
-import Data.Time
-import System.Log.Logger (Priority(..))
+import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
+import System.Log.Logger
+    (Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY))
 import qualified System.Log.Logger as Log
 
 type ProcName = String
@@ -81,11 +84,11 @@ trace = logM DEBUG
 force :: (NFData a) => a -> Process a
 force = liftIO . Control.Exception.evaluate . Control.DeepSeq.force
 
--- | Forever implementation from Control.Monad in combination with transformers 
+-- | Forever implementation from Control.Monad in combination with transformers
 -- has some problem with memory leak, use this version instead.
 -- Make sure to keep type signature "forever :: Process () -> Process ()".
--- For example, if the type signature is generalized to 
--- "forever :: Monad m => m a -> m b",as suggested by ght, 
+-- For example, if the type signature is generalized to
+-- "forever :: Monad m => m a -> m b",as suggested by ght,
 -- the function still leaks memory.
 forever :: Process () -> Process ()
 forever act = act >> forever act
@@ -186,7 +189,7 @@ runProcess cfg action = process `Control.Exception.finally` cleanup where
 emptyConfig :: IO ProcConfig
 emptyConfig = do
     var <- newTVarIO Set.empty
-    return $ ProcConfig 
+    return $ ProcConfig
         { procName = []
         , procChilds = var
         }
