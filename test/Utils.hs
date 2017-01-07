@@ -18,6 +18,13 @@ import qualified GHC.Stats as Stats
 import qualified System.Log.Logger as Logger
 import qualified System.Mem as Mem
 
+
+nullLogger :: String -> Logger.Priority -> String -> IO ()
+nullLogger _ _ _ = return ()
+
+runAppWithoutLogging :: Process a -> IO a
+runAppWithoutLogging = runAppWithConfig $ AppConfig nullLogger
+
 captureLogs :: Logger.Priority -> Process a -> IO ([LogRecord], Either SomeException a)
 captureLogs priority app = do
     logger <- inMemoryLogger

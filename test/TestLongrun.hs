@@ -7,7 +7,7 @@ import Control.Monad.IO.Class (liftIO)
 import System.Random (newStdGen, randoms)
 import Test.Framework (Test, buildTest, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Utils (assertConstantMemory, testLogsOfMatch)
+import Utils (assertConstantMemory, testLogsOfMatch, runAppWithoutLogging)
 
 import Control.Concurrent.Longrun
 
@@ -40,7 +40,7 @@ testChvar = testLogsOfMatch "variable change" INFO chvar
 
 testLong :: Test
 testLong = buildTest $ fmap (testCase "long queue pipe") $
-    runApp $ do
+    runAppWithoutLogging $ do
         stdGen <- liftIO newStdGen
         q <- newQueue1 "q"
 

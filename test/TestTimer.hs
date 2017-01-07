@@ -5,7 +5,7 @@ module TestTimer (
 import System.Log.Logger (Priority(INFO))
 import Test.Framework (Test, testGroup, buildTest)
 import Test.Framework.Providers.HUnit (testCase)
-import Utils (assertConstantMemory, testLogsOfMatch)
+import Utils (assertConstantMemory, testLogsOfMatch, runAppWithoutLogging)
 
 import Control.Concurrent.Longrun
 
@@ -55,7 +55,7 @@ testTim2 = testLogsOfMatch "test tim2" INFO tim2
 
 -- | Check memory.
 testTimLoop :: Test
-testTimLoop = buildTest $ runApp $ do
+testTimLoop = buildTest $ runAppWithoutLogging $ do
     t <- newTimer "timer" 0.01 $ do
         _sub <- spawnProcess "task" nop $ forever $ do
             logM INFO "task"
@@ -111,7 +111,7 @@ testTimException = testLogsOfMatch "test timException" INFO timException
 
 
 testTimRestart :: Test
-testTimRestart = buildTest $ runApp $ do
+testTimRestart = buildTest $ runAppWithoutLogging $ do
     t <- newTimer "timer" 0.001 $ do
         logM INFO "tick"
 

@@ -12,7 +12,7 @@ import Data.Int (Int64)
 import Data.Set as Set
 import Test.Framework (Test, buildTest, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Utils (testLogsOfMatch, assertConstantMemory)
+import Utils (testLogsOfMatch, assertConstantMemory, runAppWithoutLogging)
 
 
 testSubprocess :: Test
@@ -57,9 +57,9 @@ testTask2 = testLogsOfMatch "task2" INFO (task True)
 
 -- | Repeat running task, observe memory
 testTaskRepeat :: Test
-testTaskRepeat = buildTest $ runApp $ do
+testTaskRepeat = buildTest $ runAppWithoutLogging $ do
     counter <- newVar "counter" (0 :: Int64)
-    assertion <- assertConstantMemory 100 2 $ do
+    assertion <- assertConstantMemory 100 1.2 $ do
         cnt <- getVar' counter
         setVar' counter $ cnt + 1
         t <- spawnTask ("iteration " ++ show cnt) $ do
@@ -90,7 +90,7 @@ testProcLogs = testLogsOfMatch "regular long running process" INFO proc1 $
 
 
 testProcMem :: Test
-testProcMem = buildTest $ runApp $ do
+testProcMem = buildTest $ runAppWithoutLogging $ do
     _ticker <- spawnProcess "tickerProcess" nop $ forever $ do
         logM INFO "tick"
         sleep 0.00001
@@ -146,7 +146,7 @@ testProcProcLogs = testLogsOfMatch "process in process" INFO (procproc 0.1)
     ]
 
 testProcProcMem :: Test
-testProcProcMem = buildTest $ runApp $
+testProcProcMem = buildTest $ runAppWithoutLogging $
     fmap (testCase "spawning suprocesses in constant memory") $
         assertConstantMemory 100 1.2 $
             procproc 0.001
@@ -242,7 +242,7 @@ testInLoopLogs = testLogsOfMatch "logs" INFO inLoop1
 
 testInLoopMem :: Test
 testInLoopMem = buildTest $ fmap (testCase "constant memory" ) $
-    runApp $ assertConstantMemory 100 1.2 $ do
+    runAppWithoutLogging $ assertConstantMemory 100 1.2 $ do
         t <- spawnTask "task" $ do
             sleep 0.001
             nop
