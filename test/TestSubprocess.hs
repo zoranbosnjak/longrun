@@ -6,7 +6,7 @@ import Control.Concurrent.Longrun
 import Control.Concurrent.STM (atomically, readTVar)
 import Control.Monad (replicateM_)
 import Control.Monad (when)
-import Control.Monad.Trans.Reader (asks)
+import Control.Monad.Reader.Class (asks)
 import Data.Int (Int64)
 import Data.Set as Set
 import Test.Framework (Test, buildTest, testGroup)

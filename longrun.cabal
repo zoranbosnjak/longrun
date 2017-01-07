@@ -71,13 +71,14 @@ library
   build-depends:
     base >=4.6 && <4.10
     , async >=2.1 && <2.2
-    , transformers >=0.5 && <0.6
     , containers >=0.5 && <0.6
-    , stm >=2.4 && <2.5
-    , hslogger >=1.2 && <1.3
-    , time >=1.6 && <1.7
     , deepseq >=1.4 && <1.5
+    , hslogger >=1.2 && <1.3
+    , mtl >= 2.2 && <2.3
     , random >=1.1 && <1.2
+    , stm >=2.4 && <2.5
+    , time >=1.6 && <1.7
+    , transformers >=0.5 && <0.6
 
   -- Directories containing source files.
   -- hs-source-dirs:
@@ -92,11 +93,12 @@ test-suite test-longrun
     default-language: Haskell2010
     build-depends:
         base
-      , longrun
       , HUnit
       , QuickCheck
       , containers
       , hslogger
+      , longrun
+      , mtl
       , random
       , stm
       , test-framework

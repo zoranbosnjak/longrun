@@ -34,7 +34,7 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad.IO.Class
 import qualified Control.Concurrent.Async as A
-import Control.Monad.Trans.Reader
+import Control.Monad.Reader.Class (asks, ask)
 import Data.Set as Set
 
 import Control.Concurrent.Longrun.Base

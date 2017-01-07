@@ -27,6 +27,7 @@
 
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Control.Concurrent.Longrun.Base
@@ -40,8 +41,9 @@ import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
 import Control.DeepSeq (NFData, force)
 import Control.Exception
     (Exception, SomeException, bracket, evaluate, finally, mask_, try)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Reader (ReaderT, asks, local, runReaderT)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader.Class (MonadReader, asks, local)
+import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Data.Set as Set
 import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
 import System.Log.Logger
@@ -75,7 +77,8 @@ instance Terminator Child where
     getTid (Child a) = getTid a
     terminate (Child a) = terminate a
 
-type Process a = ReaderT ProcConfig IO a
+newtype Process a = Process (ReaderT ProcConfig IO a)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
 
 trace :: String -> Process ()
 trace = logM DEBUG
@@ -179,7 +182,9 @@ runApp app = do
 
 -- | Run process in the IO monad
 runProcess :: ProcConfig -> Process a -> IO a
-runProcess cfg action = process `Control.Exception.finally` cleanup where
+runProcess cfg (Process action) =
+    process `Control.Exception.finally` cleanup
+    where
     process = runReaderT action cfg
     cleanup = do
         childs <- atomically $ readTVar (procChilds cfg)
