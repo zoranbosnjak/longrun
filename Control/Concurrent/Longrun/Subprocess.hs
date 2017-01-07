@@ -30,12 +30,10 @@
 module Control.Concurrent.Longrun.Subprocess where
 
 import Control.Concurrent
-import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad.IO.Class
 import qualified Control.Concurrent.Async as A
 import Control.Monad.Reader.Class (asks, ask)
-import Data.Set as Set
 
 import Control.Concurrent.Longrun.Base
 
@@ -52,11 +50,7 @@ spawnTask :: ProcName -> Process a -> Process (Subprocess a)
 spawnTask name action = group name $ do
     trace "spawnTask"
     pName <- asks procName
-    var <- liftIO $ newTVarIO Set.empty
-    let cfg = ProcConfig
-            { procName = pName
-            , procChilds = var
-            }
+    cfg <- mkChildConfig pName
     lock <- liftIO $ newEmptyMVar
     a <- liftIO $ A.async $ do
         -- Need to wait for parent to finish updating its state

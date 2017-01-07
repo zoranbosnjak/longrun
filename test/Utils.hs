@@ -1,13 +1,13 @@
 module Utils where
 
 import Control.Exception (SomeException, catch)
-import Control.Concurrent.Longrun (Process, runApp)
+import Control.Concurrent.Longrun (Process, runAppWithConfig, AppConfig (AppConfig))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Char (isSpace)
 import Data.Int (Int64)
 import Data.List (dropWhileEnd)
 import Data.Maybe (fromMaybe)
-import InMemoryLogger (inMemoryLogger, evacuateLogger)
+import InMemoryLogger (inMemoryLogger, evacuateLogger, logInMemory)
 import System.Environment (lookupEnv)
 import System.Log (LogRecord)
 import Test.Framework (Test)
@@ -18,19 +18,13 @@ import qualified GHC.Stats as Stats
 import qualified System.Log.Logger as Logger
 import qualified System.Mem as Mem
 
-resetLogger :: Logger.Priority -> IO ()
-resetLogger priority = do
-    Logger.updateGlobalLogger Logger.rootLoggerName
-        (Logger.setLevel priority . Logger.removeHandler)
-
-captureLogs :: Logger.Priority -> IO a -> IO ([LogRecord], Either SomeException a)
-captureLogs priority computation = do
-    resetLogger priority
-    handler <- inMemoryLogger
-    Logger.updateGlobalLogger Logger.rootLoggerName (Logger.addHandler handler)
+captureLogs :: Logger.Priority -> Process a -> IO ([LogRecord], Either SomeException a)
+captureLogs priority app = do
+    logger <- inMemoryLogger
+    let cfg = AppConfig $ logInMemory logger
+        computation = runAppWithConfig cfg app
     a <- catch (Right <$> computation) (return . Left)
-    logs <- evacuateLogger handler
-    resetLogger Logger.DEBUG
+    logs <- filter ((>= priority) . fst) <$> evacuateLogger logger
     return (logs, a)
 
 assertLogsWithoutTimeEqual :: [LogRecord] -> [LogRecord] -> Assertion
@@ -42,7 +36,7 @@ assertLogsWithoutTimeEqual value expected =
 
 testLogsOfMatch :: String -> Logger.Priority -> Process () -> [LogRecord] -> Test
 testLogsOfMatch name priority proc expected = buildTest $ do
-    (logs, _) <- captureLogs priority $ runApp proc
+    (logs, _) <- captureLogs priority proc
     return $ testCase name $
         assertLogsWithoutTimeEqual logs expected
 

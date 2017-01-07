@@ -31,7 +31,8 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Control.Concurrent.Longrun.Base
-( Child (Child)
+( AppConfig (AppConfig)
+, Child (Child)
 , Control.Concurrent.Longrun.Base.bracket
 , Control.Concurrent.Longrun.Base.finally
 , Control.Concurrent.Longrun.Base.force
@@ -45,8 +46,8 @@ module Control.Concurrent.Longrun.Base
 , addChild
 , assert
 , die
-, emptyConfig
 , forever
+, mkChildConfig
 , getChilds
 , getTid
 , group
@@ -58,6 +59,7 @@ module Control.Concurrent.Longrun.Base
 , removeChild
 , rest
 , runApp
+, runAppWithConfig
 , runProcess
 , sleep
 , terminate
@@ -84,9 +86,12 @@ import qualified System.Log.Logger as Log
 type ProcName = String
 type ProcNames = [ProcName]
 
+type Logger = String -> Priority -> String -> IO ()
+
 data ProcConfig = ProcConfig
     { procName      :: !ProcNames
     , procChilds    :: !(TVar (Set Child))
+    , procLogger    :: !Logger
     }
 
 data Child = forall a . (Terminator a) => Child !a
@@ -108,6 +113,8 @@ instance Terminator Child where
 
 newtype Process a = Process (ReaderT ProcConfig IO a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
+
+newtype AppConfig = AppConfig Logger
 
 trace :: String -> Process ()
 trace = logM DEBUG
@@ -139,6 +146,7 @@ sleep sec = do
 logM :: Priority -> String -> Process ()
 logM prio s = do
     name <- asks procName
+    logger <- asks procLogger
     now <- liftIO $ Data.Time.getCurrentTime
     liftIO $ do
         let timeFormatUTC = "%Y-%m-%dT%H:%M:%SZ"
@@ -148,7 +156,8 @@ logM prio s = do
             nowSec = formatTime defaultTimeLocale timeFormatUnixEpoch now
             f [] = ""
             f x = foldr1 (\a b -> a++"."++b) (reverse x)
-        Log.logM (f name) prio $! s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
+
+        logger (f name) prio $! s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
 
 -- | Raise action to a new level of process name.
 group :: ProcName -> Process a -> Process a
@@ -201,8 +210,12 @@ assert False err = die $ "assertion error: " ++ err
 
 -- | Run application.
 runApp :: Process a -> IO a
-runApp app = do
-    cfg <- liftIO emptyConfig
+runApp = runAppWithConfig $ AppConfig Log.logM
+
+-- | Run application.
+runAppWithConfig :: AppConfig -> Process a -> IO a
+runAppWithConfig (AppConfig logger) app = do
+    cfg <- mkBaseConfig [] logger
     runProcess cfg app
 
 -- | Run process in the IO monad
@@ -215,22 +228,29 @@ runProcess cfg (Process action) =
         childs <- atomically $ readTVar (procChilds cfg)
         mapM_ terminate $ Set.toList childs
 
--- | Create empty configuration.
-emptyConfig :: IO ProcConfig
-emptyConfig = do
+-- | Create an empty configuration.
+mkBaseConfig :: ProcNames -> Logger -> IO ProcConfig
+mkBaseConfig names logger = do
     var <- newTVarIO Set.empty
     return $ ProcConfig
-        { procName = []
+        { procName = names
         , procChilds = var
+        , procLogger = logger
         }
+
+-- | Create an empty configuration inheriting the logger
+mkChildConfig :: ProcNames -> Process ProcConfig
+mkChildConfig names = do
+  parentLogger <- asks procLogger
+  liftIO $ mkBaseConfig names parentLogger
+
 
 -- | Aquire resources, run action, release resources (bracket wrapper).
 bracket :: Process res -> (res -> Process b) -> (res -> Process c) -> Process c
 bracket aquire release action = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
+        mkChildConfig name
     let run = runProcess cfg
         aquire' = run aquire
         release' = run . release
@@ -242,8 +262,7 @@ finally :: Process a -> Process b -> Process a
 finally action cleanup = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
+        mkChildConfig name
     let run = runProcess cfg
         action' = run action
         cleanup' = run cleanup
@@ -254,8 +273,7 @@ try :: Exception e => Process a -> Process (Either e a)
 try action = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
+        mkChildConfig name
     liftIO $ Control.Exception.try (runProcess cfg action)
 
 -- Empty operation.
@@ -273,8 +291,7 @@ mask_ :: Process a -> Process a
 mask_ proc = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
+        mkChildConfig name
     liftIO $ Control.Exception.mask_ $ runProcess cfg proc
 
 -- | Report failure (if any) to the process
