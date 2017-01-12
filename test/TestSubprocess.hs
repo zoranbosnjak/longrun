@@ -6,12 +6,13 @@ import Control.Concurrent.Longrun
 import Control.Concurrent.STM (atomically, readTVar)
 import Control.Monad (replicateM_)
 import Control.Monad (when)
-import Control.Monad.Trans.Reader (asks)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader.Class (asks)
 import Data.Int (Int64)
 import Data.Set as Set
 import Test.Framework (Test, buildTest, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Utils (testLogsOfMatch, assertConstantMemory)
+import Utils (testLogsOfMatch, assertConstantMemory, runAppWithoutLogging)
 
 
 testSubprocess :: Test
@@ -56,9 +57,9 @@ testTask2 = testLogsOfMatch "task2" INFO (task True)
 
 -- | Repeat running task, observe memory
 testTaskRepeat :: Test
-testTaskRepeat = buildTest $ runApp $ do
+testTaskRepeat = buildTest $ runAppWithoutLogging $ do
     counter <- newVar "counter" (0 :: Int64)
-    assertion <- assertConstantMemory 100 2 $ do
+    assertion <- assertConstantMemory 100 1.2 $ do
         cnt <- getVar' counter
         setVar' counter $ cnt + 1
         t <- spawnTask ("iteration " ++ show cnt) $ do
@@ -89,7 +90,7 @@ testProcLogs = testLogsOfMatch "regular long running process" INFO proc1 $
 
 
 testProcMem :: Test
-testProcMem = buildTest $ runApp $ do
+testProcMem = buildTest $ runAppWithoutLogging $ do
     _ticker <- spawnProcess "tickerProcess" nop $ forever $ do
         logM INFO "tick"
         sleep 0.00001
@@ -103,14 +104,14 @@ procproc :: Double -> Process ()
 procproc factor = do
     logM INFO "startup"
     let f delta = do
-            logM INFO $ show delta
             sleep $ delta * factor
+            logM INFO $ show delta
 
     p1 <- spawnProcess "p1" nop $ do
         _p1a <- spawnProcess "a" nop $ forever (f 0.11)
-        _p1b <- spawnProcess "b" nop $ forever (f 0.115)
+        _p1b <- spawnProcess "b" nop $ forever (f 0.12)
         rest
-    p2 <- spawnProcess "p2" nop (forever (f 0.12))
+    p2 <- spawnProcess "p2" nop (forever (f 0.13))
 
     sleep $ 0.3 * factor
     logM INFO "stop p1"
@@ -129,23 +130,19 @@ testProcProc = testGroup "process in process"
 testProcProcLogs :: Test
 testProcProcLogs = testLogsOfMatch "process in process" INFO (procproc 0.1)
     [ (INFO, "startup")
-    , (INFO, "0.12")
     , (INFO, "0.11")
-    , (INFO, "0.115")
-    , (INFO, "0.11")
-    , (INFO, "0.115")
     , (INFO, "0.12")
+    , (INFO, "0.13")
     , (INFO, "0.11")
-    , (INFO, "0.115")
     , (INFO, "0.12")
+    , (INFO, "0.13")
     , (INFO, "stop p1")
-    , (INFO, "0.12")
-    , (INFO, "0.12")
+    , (INFO, "0.13")
     , (INFO, "stop p2")
     ]
 
 testProcProcMem :: Test
-testProcProcMem = buildTest $ runApp $
+testProcProcMem = buildTest $ runAppWithoutLogging $
     fmap (testCase "spawning suprocesses in constant memory") $
         assertConstantMemory 100 1.2 $
             procproc 0.001
@@ -160,11 +157,11 @@ autoStop1 = do
             logM INFO "this should not be displayed"
         sleep 0.002
         logM INFO "this should also not be displayed"
-    c1 <- asks procChilds >>= runIO . atomically . readTVar
+    c1 <- asks procChilds >>= liftIO . atomically . readTVar
     logM INFO $ "c1: " ++ show (Set.size c1)
     sleep 0.001
     stop_ t
-    c2 <- asks procChilds >>= runIO . atomically . readTVar
+    c2 <- asks procChilds >>= liftIO . atomically . readTVar
     logM INFO $ "c2: " ++ show (Set.size c2)
     sleep 0.005
     logM INFO "done"
@@ -189,11 +186,11 @@ autoStop2 = do
         _ <- fail "oops"
         rest
     sleep 0.01
-    c1 <- asks procChilds >>= runIO . atomically . readTVar
+    c1 <- asks procChilds >>= liftIO . atomically . readTVar
     logM INFO $ "c1: " ++ show (Set.size c1)
 
     _ <- waitCatch t
-    c2 <- asks procChilds >>= runIO . atomically . readTVar
+    c2 <- asks procChilds >>= liftIO . atomically . readTVar
     logM INFO $ "c2: " ++ show (Set.size c2)
 
 testAutoStop2 :: Test
@@ -241,7 +238,7 @@ testInLoopLogs = testLogsOfMatch "logs" INFO inLoop1
 
 testInLoopMem :: Test
 testInLoopMem = buildTest $ fmap (testCase "constant memory" ) $
-    runApp $ assertConstantMemory 100 1.2 $ do
+    runAppWithoutLogging $ assertConstantMemory 100 1.2 $ do
         t <- spawnTask "task" $ do
             sleep 0.001
             nop

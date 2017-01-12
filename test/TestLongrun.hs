@@ -3,10 +3,11 @@ module TestLongrun (
 ) where
 
 import Control.Monad (forM_)
+import Control.Monad.IO.Class (liftIO)
 import System.Random (newStdGen, randoms)
 import Test.Framework (Test, buildTest, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Utils (assertConstantMemory, testLogsOfMatch)
+import Utils (assertConstantMemory, testLogsOfMatch, runAppWithoutLogging)
 
 import Control.Concurrent.Longrun
 
@@ -39,8 +40,8 @@ testChvar = testLogsOfMatch "variable change" INFO chvar
 
 testLong :: Test
 testLong = buildTest $ fmap (testCase "long queue pipe") $
-    runApp $ do
-        stdGen <- runIO newStdGen
+    runAppWithoutLogging $ do
+        stdGen <- liftIO newStdGen
         q <- newQueue1 "q"
 
         _src <- spawnProcess "source" nop $
@@ -52,7 +53,7 @@ testLong = buildTest $ fmap (testCase "long queue pipe") $
             _ <- readQueue' q
             return ()
 
-        assertion <- assertConstantMemory 100 1.2 $ do
+        assertion <- assertConstantMemory 500 3 $ do
             sleep 0.001
 
         stop_ _sink

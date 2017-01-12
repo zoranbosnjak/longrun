@@ -4,7 +4,7 @@ module TestWait (
 
 import Test.Framework (Test, buildTest, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Utils (assertConstantMemory, testLogsOfMatch)
+import Utils (assertConstantMemory, testLogsOfMatch, runAppWithoutLogging)
 
 import qualified Control.Concurrent.Longrun as Longrun
 
@@ -62,4 +62,4 @@ procMem = do
 testMem :: Test
 testMem = buildTest $
     fmap (testCase "queue timeout memory leak") $
-        Longrun.runApp $ assertConstantMemory 100 1.2 procMem
+        runAppWithoutLogging $ assertConstantMemory 100 1.2 procMem

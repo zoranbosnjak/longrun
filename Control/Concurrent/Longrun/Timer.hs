@@ -32,6 +32,7 @@ module Control.Concurrent.Longrun.Timer where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
+import Control.Monad.IO.Class (liftIO)
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
@@ -40,7 +41,7 @@ data Timer = Timer
     { tParent   :: !ThreadId
     , tName     :: !ProcName
     , tTimeout  :: !Double
-    , tAction   :: !(Process ()) 
+    , tAction   :: !(Process ())
     , tRunning  :: !(TVar (Maybe (Subprocess ())))
     , tExpired  :: !(TVar Bool)
     }
@@ -49,10 +50,10 @@ data Timer = Timer
 newTimer :: ProcName -> Double -> Process () -> Process Timer
 newTimer name seconds action = group name $ do
     trace $ "newTimer, seconds: " ++ show seconds
-    parent <- runIO $ Control.Concurrent.myThreadId
-    running <- runIO $ newTVarIO Nothing
-    expired <- runIO $ newTVarIO False
-    return $ Timer 
+    parent <- liftIO $ Control.Concurrent.myThreadId
+    running <- liftIO $ newTVarIO Nothing
+    expired <- liftIO $ newTVarIO False
+    return $ Timer
         { tParent = parent
         , tName = name
         , tTimeout = seconds
@@ -64,14 +65,14 @@ newTimer name seconds action = group name $ do
 _manipulateTimer :: Timer -> Process a -> Process a
 _manipulateTimer t manipulator = group (tName t) $ do
     -- timer manipulation is only possible from the same parent
-    parent <- runIO $ Control.Concurrent.myThreadId
+    _ <- liftIO $ Control.Concurrent.myThreadId
     -- TODO: for some reason, this assertion leaks memory
     --assert (parent == tParent t) "wrong caller"
     manipulator
 
 _stopTimer :: Timer -> Process Bool
 _stopTimer t = do
-    (running, expired) <- runIO $ atomically $ do
+    (running, expired) <- liftIO $ atomically $ do
         running <- readTVar $ tRunning t
         expired <- readTVar $ tExpired t
         writeTVar (tRunning t) Nothing
@@ -86,17 +87,17 @@ _stopTimer t = do
 -- | (Re)start timer.
 restartTimer :: Timer -> Process Bool
 restartTimer t = _manipulateTimer t $ do
-    parent <- runIO $ Control.Concurrent.myThreadId
+    parent <- liftIO $ Control.Concurrent.myThreadId
     wasRunning <- _stopTimer t
 
     -- start delayed task
     d <- spawnTask "delayed" $ ungroup $ do
         sleep $ tTimeout t
         trace "timer expired"
-        runIO $ atomically $ writeTVar (tExpired t) True
+        liftIO $ atomically $ writeTVar (tExpired t) True
         mask_ $ tAction t `onFailureSignal` parent
 
-    runIO $ atomically $ writeTVar (tRunning t) $ Just d
+    liftIO $ atomically $ writeTVar (tRunning t) $ Just d
     trace $ "restartTimer, was running: " ++ show wasRunning
     return wasRunning
 
@@ -110,7 +111,7 @@ stopTimer t = _manipulateTimer t $ do
 -- | Expedite timer expire if running.
 expireTimer :: Timer -> Process Bool
 expireTimer t = _manipulateTimer t $ do
-    parent <- runIO $ Control.Concurrent.myThreadId
+    parent <- liftIO $ Control.Concurrent.myThreadId
     wasRunning <- _stopTimer t
     when wasRunning $ do
         _ <- spawnTask "action" $ ungroup $ do

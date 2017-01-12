@@ -27,33 +27,72 @@
 
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Control.Concurrent.Longrun.Base
-    ( module Control.Concurrent.Longrun.Base
-    , Priority(..)
-    ) where
+( AppConfig (AppConfig)
+, Child (Child)
+, Control.Concurrent.Longrun.Base.bracket
+, Control.Concurrent.Longrun.Base.finally
+, Control.Concurrent.Longrun.Base.force
+, Control.Concurrent.Longrun.Base.mask_
+, Control.Concurrent.Longrun.Base.try
+, Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY)
+, ProcConfig (ProcConfig)
+, ProcName
+, Process
+, Terminator
+, addChild
+, assert
+, die
+, forever
+, mkChildConfig
+, getChilds
+, getTid
+, group
+, logM
+, nop
+, onFailureSignal
+, procChilds
+, procName
+, removeChild
+, rest
+, runApp
+, runAppWithConfig
+, runProcess
+, sleep
+, terminate
+, threadDelaySec
+, trace
+, ungroup
+) where
 
 import Control.Concurrent
-import Control.Concurrent.STM
-import Control.DeepSeq
+    (ThreadId, myThreadId, killThread, threadDelay, throwTo)
+import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Control.DeepSeq (NFData, force)
 import Control.Exception
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Reader
+    (Exception, SomeException, bracket, evaluate, finally, mask_, try)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader.Class (MonadReader, asks, local)
+import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Data.Set as Set
-import Data.Time
-import System.Log.Logger (Priority(..))
+import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
+import System.Log.Logger
+    (Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY))
 import qualified System.Log.Logger as Log
 
 type ProcName = String
 type ProcNames = [ProcName]
 
+type Logger = String -> Priority -> String -> IO ()
+
 data ProcConfig = ProcConfig
     { procName      :: !ProcNames
     , procChilds    :: !(TVar (Set Child))
+    , procLogger    :: !Logger
     }
-
-data ProcState = ProcState ![Child]
 
 data Child = forall a . (Terminator a) => Child !a
 
@@ -72,7 +111,10 @@ instance Terminator Child where
     getTid (Child a) = getTid a
     terminate (Child a) = terminate a
 
-type Process a = ReaderT ProcConfig IO a
+newtype Process a = Process (ReaderT ProcConfig IO a)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
+
+newtype AppConfig = AppConfig Logger
 
 trace :: String -> Process ()
 trace = logM DEBUG
@@ -81,11 +123,11 @@ trace = logM DEBUG
 force :: (NFData a) => a -> Process a
 force = liftIO . Control.Exception.evaluate . Control.DeepSeq.force
 
--- | Forever implementation from Control.Monad in combination with transformers 
+-- | Forever implementation from Control.Monad in combination with transformers
 -- has some problem with memory leak, use this version instead.
 -- Make sure to keep type signature "forever :: Process () -> Process ()".
--- For example, if the type signature is generalized to 
--- "forever :: Monad m => m a -> m b",as suggested by ght, 
+-- For example, if the type signature is generalized to
+-- "forever :: Monad m => m a -> m b",as suggested by ght,
 -- the function still leaks memory.
 forever :: Process () -> Process ()
 forever act = act >> forever act
@@ -104,6 +146,7 @@ sleep sec = do
 logM :: Priority -> String -> Process ()
 logM prio s = do
     name <- asks procName
+    logger <- asks procLogger
     now <- liftIO $ Data.Time.getCurrentTime
     liftIO $ do
         let timeFormatUTC = "%Y-%m-%dT%H:%M:%SZ"
@@ -113,7 +156,8 @@ logM prio s = do
             nowSec = formatTime defaultTimeLocale timeFormatUnixEpoch now
             f [] = ""
             f x = foldr1 (\a b -> a++"."++b) (reverse x)
-        Log.logM (f name) prio $! s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
+
+        logger (f name) prio $! s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
 
 -- | Raise action to a new level of process name.
 group :: ProcName -> Process a -> Process a
@@ -153,10 +197,6 @@ removeChild child = do
     trace "removeChild"
     modifyChilds $ Set.delete child
 
--- | Convert IO action to Process.
-runIO :: IO a -> Process a
-runIO = liftIO
-
 -- | Terminate self.
 die :: String -> Process ()
 die reason = do
@@ -170,60 +210,71 @@ assert False err = die $ "assertion error: " ++ err
 
 -- | Run application.
 runApp :: Process a -> IO a
-runApp app = do
-    cfg <- liftIO emptyConfig
+runApp = runAppWithConfig $ AppConfig Log.logM
+
+-- | Run application.
+runAppWithConfig :: AppConfig -> Process a -> IO a
+runAppWithConfig (AppConfig logger) app = do
+    cfg <- mkBaseConfig [] logger
     runProcess cfg app
 
 -- | Run process in the IO monad
 runProcess :: ProcConfig -> Process a -> IO a
-runProcess cfg action = process `Control.Exception.finally` cleanup where
+runProcess cfg (Process action) =
+    process `Control.Exception.finally` cleanup
+    where
     process = runReaderT action cfg
     cleanup = do
         childs <- atomically $ readTVar (procChilds cfg)
         mapM_ terminate $ Set.toList childs
 
--- | Create empty configuration.
-emptyConfig :: IO ProcConfig
-emptyConfig = do
+-- | Create an empty configuration.
+mkBaseConfig :: ProcNames -> Logger -> IO ProcConfig
+mkBaseConfig names logger = do
     var <- newTVarIO Set.empty
-    return $ ProcConfig 
-        { procName = []
+    return $ ProcConfig
+        { procName = names
         , procChilds = var
+        , procLogger = logger
         }
+
+-- | Create an empty configuration inheriting the logger
+mkChildConfig :: ProcNames -> Process ProcConfig
+mkChildConfig names = do
+  parentLogger <- asks procLogger
+  liftIO $ mkBaseConfig names parentLogger
+
 
 -- | Aquire resources, run action, release resources (bracket wrapper).
 bracket :: Process res -> (res -> Process b) -> (res -> Process c) -> Process c
 bracket aquire release action = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
+        mkChildConfig name
     let run = runProcess cfg
         aquire' = run aquire
         release' = run . release
         action' = run . action
-    runIO $ Control.Exception.bracket aquire' release' action'
+    liftIO $ Control.Exception.bracket aquire' release' action'
 
 -- | Run action, then cleanup (finally wrapper).
 finally :: Process a -> Process b -> Process a
 finally action cleanup = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
+        mkChildConfig name
     let run = runProcess cfg
         action' = run action
         cleanup' = run cleanup
-    runIO $ Control.Exception.finally action' cleanup'
+    liftIO $ Control.Exception.finally action' cleanup'
 
 -- | Try to run an action (try wrapper).
 try :: Exception e => Process a -> Process (Either e a)
 try action = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
-    runIO $ Control.Exception.try (runProcess cfg action)
+        mkChildConfig name
+    liftIO $ Control.Exception.try (runProcess cfg action)
 
 -- Empty operation.
 nop :: Process ()
@@ -240,15 +291,14 @@ mask_ :: Process a -> Process a
 mask_ proc = do
     cfg <- do
         name <- asks procName
-        cfg <- liftIO $ emptyConfig
-        return $ cfg {procName = name}
-    runIO $ Control.Exception.mask_ $ runProcess cfg proc
+        mkChildConfig name
+    liftIO $ Control.Exception.mask_ $ runProcess cfg proc
 
 -- | Report failure (if any) to the process
 onFailureSignal :: Process () -> ThreadId -> Process ()
 onFailureSignal action proc = do
     rv <- Control.Concurrent.Longrun.Base.try action
     case rv of
-        Left e -> runIO $ Control.Concurrent.throwTo proc (e::SomeException)
+        Left e -> liftIO $ Control.Concurrent.throwTo proc (e::SomeException)
         Right _ -> return ()
 

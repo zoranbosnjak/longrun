@@ -25,7 +25,7 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun 
+module Control.Concurrent.Longrun
     ( module Control.Concurrent.Longrun
     , module Control.Concurrent.Longrun.Base
     , module Control.Concurrent.Longrun.Subprocess
@@ -36,6 +36,7 @@ module Control.Concurrent.Longrun
 
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Control.Monad.IO.Class (liftIO)
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
@@ -62,7 +63,7 @@ onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
         return $ Child p
       where
         loop x = do
-            y <- runIO $ atomically $ do
+            y <- liftIO $ atomically $ do
                 y <- readTVar var >>= return . f
                 case y == x of
                     True -> retry
@@ -73,7 +74,7 @@ onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
 
 -- | Return (Just msg) or Nothing on timeout.
 readQueueTimeout :: ReadEnd a -> Double -> Process (Maybe a)
-readQueueTimeout (ReadEnd q) timeout = runIO $ do
+readQueueTimeout (ReadEnd q) timeout = liftIO $ do
     expired <- newTVarIO False
     task <- async $ do
         threadDelaySec timeout
