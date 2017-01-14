@@ -25,7 +25,20 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun.Variable where
+module Control.Concurrent.Longrun.Variable
+( Var(Var)
+, vName
+, vVar
+, GetEnd(GetEnd)
+, SetEnd(SetEnd)
+, newVar
+, newVarBind
+, getVar
+, getVar'
+, setVar
+, setVar'
+, modifyVar
+) where
 
 import Control.DeepSeq (NFData)
 import Control.Monad.IO.Class (liftIO)
