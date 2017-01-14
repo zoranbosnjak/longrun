@@ -73,20 +73,26 @@ queueName = qName
 -- | Create new queue.
 newQueue :: Maybe Int -> ProcName -> Process (Queue a)
 newQueue mBound name = group name $ case mBound of
-    Nothing -> do
-        trace $ "newQueue (unbounded)"
-        q <- liftIO $ STM.newTQueueIO
-        return $ Queue name
-                       (STM.readTQueue q)
-                       (STM.writeTQueue q)
-                       (STM.tryPeekTQueue q)
-    Just bound -> do
-        trace $ "newQueue (bounded " ++ show bound ++ ")"
-        q <- liftIO $ STM.newTBQueueIO bound
-        return $ Queue name
-                       (STM.readTBQueue q)
-                       (STM.writeTBQueue q)
-                       (STM.tryPeekTBQueue q)
+    Nothing -> newUnboundedQueue name
+    Just bound -> newBoundedQueue name bound
+
+newUnboundedQueue :: ProcName -> Process (Queue a)
+newUnboundedQueue name = do
+    trace $ "newQueue (unbounded)"
+    q <- liftIO $ STM.newTQueueIO
+    return $ Queue name
+                   (STM.readTQueue q)
+                   (STM.writeTQueue q)
+                   (STM.tryPeekTQueue q)
+
+newBoundedQueue :: ProcName -> Int -> Process (Queue a)
+newBoundedQueue name bound = do
+    trace $ "newQueue (bounded " ++ show bound ++ ")"
+    q <- liftIO $ STM.newTBQueueIO bound
+    return $ Queue name
+                   (STM.readTBQueue q)
+                   (STM.writeTBQueue q)
+                   (STM.tryPeekTBQueue q)
 
 -- | Create one element bounded queue.
 newQueue1 :: ProcName -> Process (Queue a)
