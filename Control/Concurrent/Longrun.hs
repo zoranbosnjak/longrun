@@ -62,7 +62,7 @@ onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
                 True -> 1
                 False -> 2
         p <- ungroup $ spawnProcess procname nop $ loop initial
-        return $ Child p
+        return $ asChild p
       where
         loop x = do
             y <- liftIO $ STM.atomically $ do

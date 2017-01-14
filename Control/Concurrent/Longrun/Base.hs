@@ -25,7 +25,6 @@
 --
 -----------------------------------------------------------
 
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Control.Concurrent.Longrun.Base
@@ -36,20 +35,21 @@ module Control.Concurrent.Longrun.Base
 , Control.Concurrent.Longrun.Base.force
 , Control.Concurrent.Longrun.Base.mask_
 , Control.Concurrent.Longrun.Base.try
+, IsChild
 , Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY)
 , ProcConfig (ProcConfig)
 , ProcName
 , Process
-, Terminator
 , addChild
+, asChild
 , assert
+, childTid
 , die
 , forever
-, mkChildConfig
 , getChilds
-, getTid
 , group
 , logM
+, mkChildConfig
 , nop
 , onFailureSignal
 , procChilds
@@ -92,22 +92,19 @@ data ProcConfig = ProcConfig
     , procLogger    :: Logger
     }
 
-data Child = forall a . (Terminator a) => Child a
-
--- | An interface for items that can be terminated.
-class Terminator a where
-    getTid :: a -> ThreadId
-    terminate :: a -> IO ()
+data Child = Child
+    { childTid :: ThreadId
+    , terminate :: IO ()
+    }
 
 instance Eq Child where
-    Child a == Child b = getTid a == getTid b
+    Child {childTid=t1} == Child {childTid=t2} = t1 == t2
 
 instance Ord Child where
-    compare (Child a) (Child b) = compare (getTid a) (getTid b)
+    Child {childTid=t1} `compare` Child {childTid=t2} = t1 `compare` t2
 
-instance Terminator Child where
-    getTid (Child a) = getTid a
-    terminate (Child a) = terminate a
+class IsChild a where
+    asChild :: a -> Child
 
 newtype Process a = Process (ReaderT ProcConfig IO a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
