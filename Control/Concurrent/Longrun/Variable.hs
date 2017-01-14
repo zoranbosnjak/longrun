@@ -50,8 +50,8 @@ data Var a = Var
     { vName     :: ProcName
     , vVar      :: STM.TVar a
     }
-data GetEnd a = GetEnd (Var a)
-data SetEnd a = SetEnd (Var a)
+newtype GetEnd a = GetEnd (Var a)
+newtype SetEnd a = SetEnd (Var a)
 
 -- | Create new variable.
 newVar :: (Show a) => ProcName -> a -> Process (Var a)
