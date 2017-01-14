@@ -25,7 +25,21 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun.Queue where
+module Control.Concurrent.Longrun.Queue
+( Queue (Queue)
+, qName
+, qRead
+, qWrite
+, qTryPeek
+, ReadEnd (ReadEnd)
+, WriteEnd (WriteEnd)
+, newQueue
+, newQueue1
+, readQueue
+, writeQueue
+, readQueue'
+, writeQueue'
+) where
 
 import Control.Concurrent.STM (STM)
 import qualified Control.Concurrent.STM as STM
