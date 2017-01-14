@@ -25,7 +25,15 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun.Subprocess where
+module Control.Concurrent.Longrun.Subprocess
+( Subprocess(Subprocess)
+, Terminator
+, spawnTask
+, waitCatch
+, spawnProcess
+, stop
+, stop_
+) where
 
 import Control.Concurrent (myThreadId, killThread, newEmptyMVar, takeMVar, putMVar)
 import Control.Exception (SomeException)
