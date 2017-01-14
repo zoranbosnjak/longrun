@@ -26,8 +26,7 @@
 -----------------------------------------------------------
 
 module Control.Concurrent.Longrun
-    ( onChangeVar
-    , readQueueTimeout
+    ( readQueueTimeout
     , module Control.Concurrent.Longrun.Base
     , module Control.Concurrent.Longrun.Queue
     , module Control.Concurrent.Longrun.Subprocess
@@ -45,33 +44,6 @@ import Control.Concurrent.Longrun.Variable
 import Control.Concurrent.Longrun.Queue
 import Control.Concurrent.Longrun.Timer
 
--- | Run single action on each variable change.
-onChangeVar :: (Eq b) =>
-    String -> b -> GetEnd a -> (a->b) -> (b -> b -> Process ()) -> Process Child
-onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
-    do
-        trace $ "onChangeVar " ++ show varname
-
-        -- We want to block indefinitely if variable is never changed
-        -- need another dummy thread to reference 'var',
-        -- just to prevent deadlock detection.
-        -- TODO: replace this ugly solution to keep var reference alive
-        _ <- spawnProcess "dummy" nop $ forever $ do
-            sleep $ case (var==var) of
-                True -> 1
-                False -> 2
-        p <- ungroup $ spawnProcess procname nop $ loop initial
-        return $ asChild p
-      where
-        loop x = do
-            y <- liftIO $ STM.atomically $ do
-                y <- STM.readTVar var >>= return . f
-                case y == x of
-                    True -> STM.retry
-                    False -> return y
-            trace $ "variable " ++ show varname ++ " changed, triggering action"
-            act x y
-            loop y
 
 -- | Return (Just msg) or Nothing on timeout.
 readQueueTimeout :: (ReadableQueue q a) => q a -> Double -> Process (Maybe a)

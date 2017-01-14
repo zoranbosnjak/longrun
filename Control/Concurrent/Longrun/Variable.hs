@@ -25,19 +25,22 @@
 --
 -----------------------------------------------------------
 
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Control.Concurrent.Longrun.Variable
-( Var(Var)
-, vName
-, vVar
-, GetEnd(GetEnd)
-, SetEnd(SetEnd)
+( GetEnd
+, SetEnd
+, Var(Var)
+, getEnd
+, getVar
+, modifyVar
 , newVar
 , newVarBind
-, getVar
-, getVar'
+, onChangeVar
+, setEnd
 , setVar
-, setVar'
-, modifyVar
+, varName
 ) where
 
 import Control.DeepSeq (NFData)
@@ -45,13 +48,21 @@ import Control.Monad.IO.Class (liftIO)
 import qualified Control.Concurrent.STM as STM
 
 import Control.Concurrent.Longrun.Base
+import Control.Concurrent.Longrun.Subprocess (spawnProcess)
 
-data Var a = Var
-    { vName     :: ProcName
-    , vVar      :: STM.TVar a
-    }
+data Var a = Var ProcName (STM.TVar a)
+
+varName :: Var a -> ProcName
+varName (Var name _) = name
+
 newtype GetEnd a = GetEnd (Var a)
 newtype SetEnd a = SetEnd (Var a)
+
+getEnd :: Var a -> GetEnd a
+getEnd = GetEnd
+
+setEnd :: Var a -> SetEnd a
+setEnd = SetEnd
 
 -- | Create new variable.
 newVar :: (Show a) => ProcName -> a -> Process (Var a)
@@ -67,27 +78,31 @@ newVarBind name var = group name $ do
     trace $ "newVarBind, initial: " ++ show val
     return $ Var name var
 
--- | Get variable content.
-getVar :: (Show a) => GetEnd a -> Process a
-getVar (GetEnd (Var name var)) = group name $ do
-    val <- liftIO $ STM.atomically $ STM.readTVar var
-    trace $ "getVar, value: " ++ show val
-    return val
+class GettableVar v a where
+    getVar :: v a -> Process a
 
--- | Get variable content (operate on Var instead on GetEnd)
-getVar' :: (Show a) => Var a -> Process a
-getVar' = getVar . GetEnd
+instance (Show a) => GettableVar Var a where
+    getVar (Var name var) = group name $ do
+        val <- liftIO $ STM.atomically $ STM.readTVar var
+        trace $ "getVar, value: " ++ show val
+        return val
 
--- | Set variable content (evaluated).
-setVar :: (Show a, NFData a) => SetEnd a -> a -> Process ()
-setVar (SetEnd (Var name var)) val = group name $ do
-    val' <- force val
-    trace $ "setVar, value: " ++ show val'
-    liftIO $ STM.atomically $ STM.writeTVar var val'
+instance (Show a) => GettableVar GetEnd a where
+    getVar (GetEnd v) = getVar v
 
--- | Set variable content (operate on Var instead of SetEnd)
-setVar' :: (Show a, NFData a) => Var a -> a -> Process ()
-setVar' = setVar . SetEnd
+
+class SettableVar v a where
+    setVar :: v a -> a -> Process ()
+
+instance (Show a, NFData a) => SettableVar Var a where
+    setVar (Var name var) val = group name $ do
+        val' <- force val
+        trace $ "setVar, value: " ++ show val'
+        liftIO $ STM.atomically $ STM.writeTVar var val'
+
+instance (Show a, NFData a) => SettableVar SetEnd a where
+    setVar (SetEnd v) = setVar v
+
 
 -- | Modify variable content.
 modifyVar :: (Show a, NFData a) => Var a -> (a -> a) -> Process (a,a)
@@ -101,3 +116,31 @@ modifyVar (Var name var) f = group name $ do
     trace $ "modifyVar: " ++ show oldValue ++ " -> " ++ show newValue'
     return (oldValue, newValue')
 
+
+-- | Run single action on each variable change.
+onChangeVar :: (Eq b) =>
+    String -> b -> GetEnd a -> (a->b) -> (b -> b -> Process ()) -> Process Child
+onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
+    do
+        trace $ "onChangeVar " ++ show varname
+
+        -- We want to block indefinitely if variable is never changed
+        -- need another dummy thread to reference 'var',
+        -- just to prevent deadlock detection.
+        -- TODO: replace this ugly solution to keep var reference alive
+        _ <- spawnProcess "dummy" nop $ forever $ do
+            sleep $ case (var==var) of
+                True -> 1
+                False -> 2
+        p <- ungroup $ spawnProcess procname nop $ loop initial
+        return $ asChild p
+      where
+        loop x = do
+            y <- liftIO $ STM.atomically $ do
+                y <- STM.readTVar var >>= return . f
+                case y == x of
+                    True -> STM.retry
+                    False -> return y
+            trace $ "variable " ++ show varname ++ " changed, triggering action"
+            act x y
+            loop y

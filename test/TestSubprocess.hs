@@ -60,8 +60,8 @@ testTaskRepeat :: Test
 testTaskRepeat = buildTest $ runAppWithoutLogging $ do
     counter <- newVar "counter" (0 :: Int64)
     assertion <- assertConstantMemory 100 1.2 $ do
-        cnt <- getVar' counter
-        setVar' counter $ cnt + 1
+        cnt <- getVar counter
+        setVar counter $ cnt + 1
         t <- spawnTask ("iteration " ++ show cnt) $ do
             return cnt
         rv <- waitCatch t
