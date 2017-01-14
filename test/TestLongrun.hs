@@ -46,11 +46,11 @@ testLong = buildTest $ fmap (testCase "long queue pipe") $
 
         _src <- spawnProcess "source" nop $
             forM_ (randoms stdGen :: [Int]) $ \x -> do
-                writeQueue' q x
+                writeQueue q x
                 sleep 0.00001
 
         _sink <- spawnProcess "sink" nop $ forever $ do
-            _ <- readQueue' q
+            _ <- readQueue q
             return ()
 
         assertion <- assertConstantMemory 500 3 $ do

@@ -28,7 +28,6 @@
 module Control.Concurrent.Longrun
     ( onChangeVar
     , readQueueTimeout
-    , readQueueTimeout'
     , module Control.Concurrent.Longrun.Base
     , module Control.Concurrent.Longrun.Queue
     , module Control.Concurrent.Longrun.Subprocess
@@ -75,26 +74,22 @@ onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
             loop y
 
 -- | Return (Just msg) or Nothing on timeout.
-readQueueTimeout :: ReadEnd a -> Double -> Process (Maybe a)
-readQueueTimeout (ReadEnd q) timeout = liftIO $ do
-    expired <- STM.newTVarIO False
-    task <- async $ do
-        threadDelaySec timeout
-        STM.atomically $ STM.writeTVar expired True
-    ready <- STM.atomically $ do
-        val <- qTryPeek q
-        end <- STM.readTVar expired
-        case (end, val) of
-            (True, _) -> return False
-            (False, Just _) -> return True
-            _ -> STM.retry
-    cancel task
+readQueueTimeout :: (ReadableQueue q a) => q a -> Double -> Process (Maybe a)
+readQueueTimeout q timeout = do
+    ready <- liftIO $ do
+        expired <- STM.newTVarIO False
+        task <- async $ do
+            threadDelaySec timeout
+            STM.atomically $ STM.writeTVar expired True
+        ready <- STM.atomically $ do
+            val <- tryPeekQueue q
+            end <- STM.readTVar expired
+            case (end, val) of
+                (True, _) -> return False
+                (False, Just _) -> return True
+                _ -> STM.retry
+        cancel task
+        return ready
     case ready of
         False -> return Nothing
-        True -> do
-            msg <- STM.atomically $ qRead q
-            return $ Just msg
-
-readQueueTimeout' :: Queue a -> Double -> Process (Maybe a)
-readQueueTimeout' q = readQueueTimeout (ReadEnd q)
-
+        True -> Just <$> readQueue q

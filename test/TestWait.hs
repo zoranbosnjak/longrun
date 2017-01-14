@@ -21,8 +21,8 @@ procTimeout = do
     q <- Longrun.newQueue1 "test"
     _ <- Longrun.spawnTask "send" $ do
         Longrun.sleep 0.5
-        Longrun.writeQueue' q "hello"
-    msg <- Longrun.readQueueTimeout (Longrun.ReadEnd q) 0.6
+        Longrun.writeQueue q "hello"
+    msg <- Longrun.readQueueTimeout (Longrun.readEnd q) 0.6
     Longrun.logM Longrun.INFO $ show msg
 
 testTimeout :: Test
@@ -33,6 +33,7 @@ testTimeout = testLogsOfMatch "timeout" Longrun.DEBUG procTimeout
     , (Longrun.DEBUG, "addChild")
     , (Longrun.DEBUG, "sleep 0.5 seconds")
     , (Longrun.DEBUG, "writeQueue, value: \"hello\"")
+    , (Longrun.DEBUG, "readQueue, value: \"hello\"")
     , (Longrun.INFO, "Just \"hello\"")
     ]
 
@@ -44,8 +45,8 @@ procMem = do
         q <- Longrun.newQueue1 "q"
         t <- Longrun.spawnTask "send" $ do
             Longrun.sleep 0.004
-            Longrun.writeQueue' q "hello"
-        msg <- Longrun.readQueueTimeout (Longrun.ReadEnd q) 0.003
+            Longrun.writeQueue q "hello"
+        msg <- Longrun.readQueueTimeout (Longrun.readEnd q) 0.003
         _ <- Longrun.stop t
         Longrun.logM Longrun.INFO $ show msg
 
@@ -54,8 +55,8 @@ procMem = do
         q <- Longrun.newQueue1 "q"
         t <- Longrun.spawnTask "send" $ do
             Longrun.sleep 0.002
-            Longrun.writeQueue' q "hello"
-        msg <- Longrun.readQueueTimeout (Longrun.ReadEnd q) 0.003
+            Longrun.writeQueue q "hello"
+        msg <- Longrun.readQueueTimeout (Longrun.readEnd q) 0.003
         _ <- Longrun.stop t
         Longrun.logM Longrun.INFO $ show msg
 

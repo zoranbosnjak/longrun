@@ -25,20 +25,23 @@
 --
 -----------------------------------------------------------
 
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Control.Concurrent.Longrun.Queue
-( Queue (Queue)
-, qName
-, qRead
-, qWrite
-, qTryPeek
-, ReadEnd (ReadEnd)
-, WriteEnd (WriteEnd)
+( Queue
+, ReadEnd
+, ReadableQueue
+, WriteEnd
+, WriteableQueue
 , newQueue
 , newQueue1
+, queueName
+, readEnd
 , readQueue
+, tryPeekQueue
+, writeEnd
 , writeQueue
-, readQueue'
-, writeQueue'
 ) where
 
 import Control.Concurrent.STM (STM)
@@ -57,6 +60,15 @@ data Queue a = Queue
 
 newtype ReadEnd a = ReadEnd (Queue a)
 newtype WriteEnd a = WriteEnd (Queue a)
+
+readEnd :: Queue a -> ReadEnd a
+readEnd = ReadEnd
+
+writeEnd :: Queue a -> WriteEnd a
+writeEnd = WriteEnd
+
+queueName :: Queue a -> ProcName
+queueName = qName
 
 -- | Create new queue.
 newQueue :: Maybe Int -> ProcName -> Process (Queue a)
@@ -80,25 +92,30 @@ newQueue mBound name = group name $ case mBound of
 newQueue1 :: ProcName -> Process (Queue a)
 newQueue1 = newQueue (Just 1)
 
--- | Read data from the queue.
-readQueue :: (Show a) => ReadEnd a -> Process a
-readQueue (ReadEnd q) = group (qName q) $ do
-    val <- liftIO $ STM.atomically $ qRead q
-    trace $ "readQueue, value: " ++ show val
-    return val
+class ReadableQueue q a where
+    readQueue :: q a -> Process a
+    tryPeekQueue :: q a -> STM (Maybe a)
 
--- | Read data from the queue (operate on Queue instead of ReadEnd).
-readQueue' :: (Show a) => Queue a -> Process a
-readQueue' = readQueue . ReadEnd
+instance (Show a) => ReadableQueue Queue a where
+    readQueue q = group (qName q) $ do
+        val <- liftIO $ STM.atomically $ qRead q
+        trace $ "readQueue, value: " ++ show val
+        return val
+    tryPeekQueue = qTryPeek
 
--- | Write data to the queue.
-writeQueue :: (Show a, NFData a) => WriteEnd a -> a -> Process ()
-writeQueue (WriteEnd q) val = group (qName q) $ do
-    val' <- force val
-    liftIO $ STM.atomically $ (qWrite q) val'
-    trace $ "writeQueue, value: " ++ show val'
+instance (Show a) => ReadableQueue ReadEnd a where
+    readQueue (ReadEnd q) = readQueue q
+    tryPeekQueue (ReadEnd q) = tryPeekQueue q
 
--- | Write data to the queue (operate on Queue instead of WriteEnd)
-writeQueue' :: (Show a, NFData a) => Queue a -> a -> Process ()
-writeQueue' = writeQueue . WriteEnd
 
+class WriteableQueue q a where
+    writeQueue :: q a -> a -> Process ()
+
+instance (Show a, NFData a) => WriteableQueue Queue a where
+    writeQueue q val = group (qName q) $ do
+        val' <- force val
+        liftIO $ STM.atomically $ (qWrite q) val'
+        trace $ "writeQueue, value: " ++ show val'
+
+instance (Show a, NFData a) => WriteableQueue WriteEnd a where
+    writeQueue (WriteEnd q) val = writeQueue q val
