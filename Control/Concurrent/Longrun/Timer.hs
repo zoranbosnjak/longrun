@@ -25,7 +25,19 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun.Timer where
+module Control.Concurrent.Longrun.Timer
+( Timer (Timer)
+, tParent
+, tName
+, tTimeout
+, tAction
+, tRunning
+, tExpired
+, newTimer
+, restartTimer
+, stopTimer
+, expireTimer
+) where
 
 import Control.Concurrent (ThreadId, myThreadId)
 import Control.Monad (when)
