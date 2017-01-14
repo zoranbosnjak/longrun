@@ -157,11 +157,11 @@ autoStop1 = do
             logM INFO "this should not be displayed"
         sleep 0.002
         logM INFO "this should also not be displayed"
-    c1 <- asks procChilds >>= liftIO . atomically . readTVar
+    c1 <- asks procChildren >>= liftIO . atomically . readTVar
     logM INFO $ "c1: " ++ show (Set.size c1)
     sleep 0.001
     stop_ t
-    c2 <- asks procChilds >>= liftIO . atomically . readTVar
+    c2 <- asks procChildren >>= liftIO . atomically . readTVar
     logM INFO $ "c2: " ++ show (Set.size c2)
     sleep 0.005
     logM INFO "done"
@@ -186,11 +186,11 @@ autoStop2 = do
         _ <- fail "oops"
         rest
     sleep 0.01
-    c1 <- asks procChilds >>= liftIO . atomically . readTVar
+    c1 <- asks procChildren >>= liftIO . atomically . readTVar
     logM INFO $ "c1: " ++ show (Set.size c1)
 
     _ <- waitCatch t
-    c2 <- asks procChilds >>= liftIO . atomically . readTVar
+    c2 <- asks procChildren >>= liftIO . atomically . readTVar
     logM INFO $ "c2: " ++ show (Set.size c2)
 
 testAutoStop2 :: Test

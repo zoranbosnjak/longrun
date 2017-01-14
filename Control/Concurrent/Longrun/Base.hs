@@ -46,13 +46,13 @@ module Control.Concurrent.Longrun.Base
 , childTid
 , die
 , forever
-, getChilds
+, getChildren
 , group
 , logM
 , mkChildConfig
 , nop
 , onFailureSignal
-, procChilds
+, procChildren
 , procName
 , removeChild
 , rest
@@ -88,7 +88,7 @@ type Logger = String -> Priority -> String -> IO ()
 
 data ProcConfig = ProcConfig
     { procName      :: ProcNames
-    , procChilds    :: TVar (Set Child)
+    , procChildren    :: TVar (Set Child)
     , procLogger    :: Logger
     }
 
@@ -164,29 +164,29 @@ ungroup :: Process a -> Process a
 ungroup action = local f action where
    f cfg = cfg {procName = drop 1 (procName cfg)}
 
-getChilds :: Process [Child]
-getChilds = do
-    var <- asks procChilds
-    childs <- liftIO $ atomically $ readTVar var
-    trace $ "getChilds, number: " ++ show (length (Set.toList childs))
-    return $ Set.toList childs
+getChildren :: Process [Child]
+getChildren = do
+    var <- asks procChildren
+    children <- liftIO $ atomically $ readTVar var
+    trace $ "getChildren, number: " ++ show (length (Set.toList children))
+    return $ Set.toList children
 
-modifyChilds :: (Set Child -> Set Child) -> Process ()
-modifyChilds f = do
-    var <- asks procChilds
+modifyChildren :: (Set Child -> Set Child) -> Process ()
+modifyChildren f = do
+    var <- asks procChildren
     liftIO $ atomically $ modifyTVar' var f
 
 -- | Add child to process config.
 addChild :: Child -> Process ()
 addChild child = do
     trace "addChild"
-    modifyChilds $ Set.insert child
+    modifyChildren $ Set.insert child
 
 -- | Remove child from process config.
 removeChild :: Child -> Process ()
 removeChild child = do
     trace "removeChild"
-    modifyChilds $ Set.delete child
+    modifyChildren $ Set.delete child
 
 -- | Terminate self.
 die :: String -> Process ()
@@ -216,8 +216,8 @@ runProcess cfg (Process action) =
     where
     process = runReaderT action cfg
     cleanup = do
-        childs <- atomically $ readTVar (procChilds cfg)
-        mapM_ terminate $ Set.toList childs
+        children <- atomically $ readTVar (procChildren cfg)
+        mapM_ terminate $ Set.toList children
 
 -- | Create an empty configuration.
 mkBaseConfig :: ProcNames -> Logger -> IO ProcConfig
@@ -225,7 +225,7 @@ mkBaseConfig names logger = do
     var <- newTVarIO Set.empty
     return $ ProcConfig
         { procName = names
-        , procChilds = var
+        , procChildren = var
         , procLogger = logger
         }
 

@@ -91,7 +91,7 @@ spawnProcess name onExit action = do
         liftIO $ Control.Concurrent.killThread parent
     return a
 
--- | Stop a subprocess, remove it from the list of childs.
+-- | Stop a subprocess, remove it from the list of children.
 -- Return running status, just before call to stop.
 stop :: Subprocess a -> Process Bool
 stop (Subprocess a) = do
