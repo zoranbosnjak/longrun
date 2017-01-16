@@ -19,10 +19,10 @@ testVariable = testGroup "testVariable"
 var1 :: Longrun.Process ()
 var1 = do
     var <- Longrun.newVar "var1" "content"
-    val1 <- Longrun.getVar' var
+    val1 <- Longrun.getVar var
     Longrun.logM INFO $ show val1
-    Longrun.setVar' var "new content"
-    val2 <- Longrun.getVar' var
+    Longrun.setVar var "new content"
+    val2 <- Longrun.getVar var
     Longrun.logM INFO $ show val2
 
 testVar1 :: Test
@@ -41,7 +41,7 @@ var2 :: Longrun.Process ()
 var2 = do
     var <- Longrun.newVar "var" (1::Int)
     (oldVal,newVal) <- Longrun.modifyVar var (+1)
-    val <- Longrun.getVar' var
+    val <- Longrun.getVar var
     Longrun.logM INFO $ show oldVal
     Longrun.logM INFO $ show newVal
     Longrun.logM INFO $ show val

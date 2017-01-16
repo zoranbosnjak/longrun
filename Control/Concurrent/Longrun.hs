@@ -26,17 +26,17 @@
 -----------------------------------------------------------
 
 module Control.Concurrent.Longrun
-    ( module Control.Concurrent.Longrun
+    ( readQueueTimeout
     , module Control.Concurrent.Longrun.Base
-    , module Control.Concurrent.Longrun.Subprocess
-    , module Control.Concurrent.Longrun.Variable
     , module Control.Concurrent.Longrun.Queue
+    , module Control.Concurrent.Longrun.Subprocess
     , module Control.Concurrent.Longrun.Timer
+    , module Control.Concurrent.Longrun.Variable
     ) where
 
-import Control.Concurrent.Async
-import Control.Concurrent.STM
+import Control.Concurrent.Async (async, cancel)
 import Control.Monad.IO.Class (liftIO)
+import qualified Control.Concurrent.STM as STM
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
@@ -44,55 +44,24 @@ import Control.Concurrent.Longrun.Variable
 import Control.Concurrent.Longrun.Queue
 import Control.Concurrent.Longrun.Timer
 
--- | Run single action on each variable change.
-onChangeVar :: (Eq b) =>
-    String -> b -> GetEnd a -> (a->b) -> (b -> b -> Process ()) -> Process Child
-onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
-    do
-        trace $ "onChangeVar " ++ show varname
-
-        -- We want to block indefinitely if variable is never changed
-        -- need another dummy thread to reference 'var',
-        -- just to prevent deadlock detection.
-        -- TODO: replace this ugly solution to keep var reference alive
-        _ <- spawnProcess "dummy" nop $ forever $ do
-            sleep $ case (var==var) of
-                True -> 1
-                False -> 2
-        p <- ungroup $ spawnProcess procname nop $ loop initial
-        return $ Child p
-      where
-        loop x = do
-            y <- liftIO $ atomically $ do
-                y <- readTVar var >>= return . f
-                case y == x of
-                    True -> retry
-                    False -> return y
-            trace $ "variable " ++ show varname ++ " changed, triggering action"
-            act x y
-            loop y
 
 -- | Return (Just msg) or Nothing on timeout.
-readQueueTimeout :: ReadEnd a -> Double -> Process (Maybe a)
-readQueueTimeout (ReadEnd q) timeout = liftIO $ do
-    expired <- newTVarIO False
-    task <- async $ do
-        threadDelaySec timeout
-        atomically $ writeTVar expired True
-    ready <- atomically $ do
-        val <- qTryPeek q
-        end <- readTVar expired
-        case (end, val) of
-            (True, _) -> return False
-            (False, Just _) -> return True
-            _ -> retry
-    cancel task
+readQueueTimeout :: (ReadableQueue q a) => q a -> Double -> Process (Maybe a)
+readQueueTimeout q timeout = do
+    ready <- liftIO $ do
+        expired <- STM.newTVarIO False
+        task <- async $ do
+            threadDelaySec timeout
+            STM.atomically $ STM.writeTVar expired True
+        ready <- STM.atomically $ do
+            val <- tryPeekQueue q
+            end <- STM.readTVar expired
+            case (end, val) of
+                (True, _) -> return False
+                (False, Just _) -> return True
+                _ -> STM.retry
+        cancel task
+        return ready
     case ready of
         False -> return Nothing
-        True -> do
-            msg <- atomically $ qRead q
-            return $ Just msg
-
-readQueueTimeout' :: Queue a -> Double -> Process (Maybe a)
-readQueueTimeout' q = readQueueTimeout (ReadEnd q)
-
+        True -> Just <$> readQueue q

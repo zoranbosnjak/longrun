@@ -18,12 +18,12 @@ testQueue = testGroup "testQueue"
 procUnboundedQueue :: Process ()
 procUnboundedQueue = do
     q <- newQueue Nothing "q"
-    writeQueue' q "a"
-    writeQueue' q "b"
-    readQueue' q >>= logM INFO . show
+    writeQueue q "a"
+    writeQueue q "b"
+    readQueue q >>= logM INFO . show
     _ <- spawnTask "reader" $ do
-        readQueue' q >>= logM INFO . show
-        readQueue' q >>= logM INFO . show
+        readQueue q >>= logM INFO . show
+        readQueue q >>= logM INFO . show
         logM INFO "this shall not be displayed"
     sleep 1
     logM INFO "bye"
@@ -40,11 +40,11 @@ testUnboundedQueue = testLogsOfMatch "unbounded queue" INFO procUnboundedQueue
 procBoundedQueue :: Process ()
 procBoundedQueue = do
     q <- newQueue1 "q"
-    writeQueue' q "a"
-    readQueue' q >>= logM INFO . show
-    writeQueue' q "c"
+    writeQueue q "a"
+    readQueue q >>= logM INFO . show
+    writeQueue q "c"
     t <- spawnTask "writer" $ do
-        writeQueue' q "b"
+        writeQueue q "b"
     rv <- waitCatch t
     logM INFO $ show rv
     logM INFO "done"

@@ -25,7 +25,6 @@
 --
 -----------------------------------------------------------
 
-{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Control.Concurrent.Longrun.Base
@@ -36,23 +35,24 @@ module Control.Concurrent.Longrun.Base
 , Control.Concurrent.Longrun.Base.force
 , Control.Concurrent.Longrun.Base.mask_
 , Control.Concurrent.Longrun.Base.try
+, IsChild
 , Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY)
 , ProcConfig (ProcConfig)
 , ProcName
 , Process
-, Terminator
 , addChild
+, asChild
 , assert
+, childTid
 , die
 , forever
-, mkChildConfig
-, getChilds
-, getTid
+, getChildren
 , group
 , logM
+, mkChildConfig
 , nop
 , onFailureSignal
-, procChilds
+, procChildren
 , procName
 , removeChild
 , rest
@@ -68,7 +68,7 @@ module Control.Concurrent.Longrun.Base
 
 import Control.Concurrent
     (ThreadId, myThreadId, killThread, threadDelay, throwTo)
-import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, modifyTVar')
 import Control.DeepSeq (NFData, force)
 import Control.Exception
     (Exception, SomeException, bracket, evaluate, finally, mask_, try)
@@ -88,26 +88,23 @@ type Logger = String -> Priority -> String -> IO ()
 
 data ProcConfig = ProcConfig
     { procName      :: ProcNames
-    , procChilds    :: TVar (Set Child)
+    , procChildren    :: TVar (Set Child)
     , procLogger    :: Logger
     }
 
-data Child = forall a . (Terminator a) => Child a
-
--- | An interface for items that can be terminated.
-class Terminator a where
-    getTid :: a -> ThreadId
-    terminate :: a -> IO ()
+data Child = Child
+    { childTid :: ThreadId
+    , terminate :: IO ()
+    }
 
 instance Eq Child where
-    Child a == Child b = getTid a == getTid b
+    Child {childTid=t1} == Child {childTid=t2} = t1 == t2
 
 instance Ord Child where
-    compare (Child a) (Child b) = compare (getTid a) (getTid b)
+    Child {childTid=t1} `compare` Child {childTid=t2} = t1 `compare` t2
 
-instance Terminator Child where
-    getTid (Child a) = getTid a
-    terminate (Child a) = terminate a
+class IsChild a where
+    asChild :: a -> Child
 
 newtype Process a = Process (ReaderT ProcConfig IO a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
@@ -132,7 +129,7 @@ forever act = act >> forever act
 
 -- | Delay for a number of seconds
 threadDelaySec :: Double -> IO ()
-threadDelaySec sec = threadDelay . round . (1000000*) $ sec
+threadDelaySec sec = threadDelay $ round $ 1000000 * sec
 
 -- | Delay for a number of seconds (Process version)
 sleep :: Double -> Process ()
@@ -165,35 +162,31 @@ group name action = local f action where
 -- | Remove one level of process name.
 ungroup :: Process a -> Process a
 ungroup action = local f action where
-   f cfg = cfg {procName = strip (procName cfg)}
-   strip [] = []
-   strip x = tail x
+   f cfg = cfg {procName = drop 1 (procName cfg)}
 
-getChilds :: Process [Child]
-getChilds = do
-    var <- asks procChilds
-    childs <- liftIO $ atomically $ readTVar var
-    trace $ "getChilds, number: " ++ show (length (Set.toList childs))
-    return $ Set.toList childs
+getChildren :: Process [Child]
+getChildren = do
+    var <- asks procChildren
+    children <- liftIO $ atomically $ readTVar var
+    trace $ "getChildren, number: " ++ show (length (Set.toList children))
+    return $ Set.toList children
 
-modifyChilds :: (Set Child -> Set Child) -> Process ()
-modifyChilds f = do
-    var <- asks procChilds
-    liftIO $ atomically $ do
-        childs <- readTVar var
-        writeTVar var $! f childs
+modifyChildren :: (Set Child -> Set Child) -> Process ()
+modifyChildren f = do
+    var <- asks procChildren
+    liftIO $ atomically $ modifyTVar' var f
 
 -- | Add child to process config.
 addChild :: Child -> Process ()
 addChild child = do
     trace "addChild"
-    modifyChilds $ Set.insert child
+    modifyChildren $ Set.insert child
 
 -- | Remove child from process config.
 removeChild :: Child -> Process ()
 removeChild child = do
     trace "removeChild"
-    modifyChilds $ Set.delete child
+    modifyChildren $ Set.delete child
 
 -- | Terminate self.
 die :: String -> Process ()
@@ -223,8 +216,8 @@ runProcess cfg (Process action) =
     where
     process = runReaderT action cfg
     cleanup = do
-        childs <- atomically $ readTVar (procChilds cfg)
-        mapM_ terminate $ Set.toList childs
+        children <- atomically $ readTVar (procChildren cfg)
+        mapM_ terminate $ Set.toList children
 
 -- | Create an empty configuration.
 mkBaseConfig :: ProcNames -> Logger -> IO ProcConfig
@@ -232,7 +225,7 @@ mkBaseConfig names logger = do
     var <- newTVarIO Set.empty
     return $ ProcConfig
         { procName = names
-        , procChilds = var
+        , procChildren = var
         , procLogger = logger
         }
 

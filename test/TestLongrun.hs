@@ -22,13 +22,13 @@ testLongrun = testGroup "test Longrun"
 chvar :: Process ()
 chvar = do
     var <- newVar "var" (1::Int)
-    _ <- onChangeVar "observer" 1 (GetEnd var) id $ \oldVal newVal -> do
+    _ <- onChangeVar "observer" 1 (getEnd var) id $ \oldVal newVal -> do
         logM INFO $ "Variable changed " ++ show oldVal ++ " -> " ++ show newVal
 
     sleep 0.01
-    setVar' var 2
+    setVar var 2
     sleep 0.01
-    setVar' var 3
+    setVar var 3
     sleep 0.01
 
 testChvar :: Test
@@ -46,11 +46,11 @@ testLong = buildTest $ fmap (testCase "long queue pipe") $
 
         _src <- spawnProcess "source" nop $
             forM_ (randoms stdGen :: [Int]) $ \x -> do
-                writeQueue' q x
+                writeQueue q x
                 sleep 0.00001
 
         _sink <- spawnProcess "sink" nop $ forever $ do
-            _ <- readQueue' q
+            _ <- readQueue q
             return ()
 
         assertion <- assertConstantMemory 500 3 $ do

@@ -25,9 +25,27 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun.Queue where
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
-import Control.Concurrent.STM
+module Control.Concurrent.Longrun.Queue
+( Queue
+, ReadEnd
+, ReadableQueue
+, WriteEnd
+, WriteableQueue
+, newQueue
+, newQueue1
+, queueName
+, readEnd
+, readQueue
+, tryPeekQueue
+, writeEnd
+, writeQueue
+) where
+
+import Control.Concurrent.STM (STM)
+import qualified Control.Concurrent.STM as STM
 import Control.DeepSeq (NFData)
 import Control.Monad.IO.Class (liftIO)
 
@@ -43,43 +61,67 @@ data Queue a = Queue
 newtype ReadEnd a = ReadEnd (Queue a)
 newtype WriteEnd a = WriteEnd (Queue a)
 
+readEnd :: Queue a -> ReadEnd a
+readEnd = ReadEnd
+
+writeEnd :: Queue a -> WriteEnd a
+writeEnd = WriteEnd
+
+queueName :: Queue a -> ProcName
+queueName = qName
+
 -- | Create new queue.
 newQueue :: Maybe Int -> ProcName -> Process (Queue a)
-newQueue mBound name = group name $ do
-    (readFunc, writeFunc, tryPeekFunc) <- case mBound of
-        Nothing -> do
-            trace $ "newQueue (unbounded)"
-            q <- liftIO $ newTQueueIO
-            return $ (readTQueue q, writeTQueue q, tryPeekTQueue q)
-        Just bound -> do
-            trace $ "newQueue (bounded " ++ show bound ++ ")"
-            q <- liftIO $ newTBQueueIO bound
-            return $ (readTBQueue q, writeTBQueue q, tryPeekTBQueue q)
-    return $ Queue name readFunc writeFunc tryPeekFunc
+newQueue mBound name = group name $ case mBound of
+    Nothing -> newUnboundedQueue name
+    Just bound -> newBoundedQueue name bound
+
+newUnboundedQueue :: ProcName -> Process (Queue a)
+newUnboundedQueue name = do
+    trace $ "newQueue (unbounded)"
+    q <- liftIO $ STM.newTQueueIO
+    return $ Queue name
+                   (STM.readTQueue q)
+                   (STM.writeTQueue q)
+                   (STM.tryPeekTQueue q)
+
+newBoundedQueue :: ProcName -> Int -> Process (Queue a)
+newBoundedQueue name bound = do
+    trace $ "newQueue (bounded " ++ show bound ++ ")"
+    q <- liftIO $ STM.newTBQueueIO bound
+    return $ Queue name
+                   (STM.readTBQueue q)
+                   (STM.writeTBQueue q)
+                   (STM.tryPeekTBQueue q)
 
 -- | Create one element bounded queue.
 newQueue1 :: ProcName -> Process (Queue a)
 newQueue1 = newQueue (Just 1)
 
--- | Read data from the queue.
-readQueue :: (Show a) => ReadEnd a -> Process a
-readQueue (ReadEnd q) = group (qName q) $ do
-    val <- liftIO $ atomically $ qRead q
-    trace $ "readQueue, value: " ++ show val
-    return val
+class ReadableQueue q a where
+    readQueue :: q a -> Process a
+    tryPeekQueue :: q a -> STM (Maybe a)
 
--- | Read data from the queue (operate on Queue instead of ReadEnd).
-readQueue' :: (Show a) => Queue a -> Process a
-readQueue' = readQueue . ReadEnd
+instance (Show a) => ReadableQueue Queue a where
+    readQueue q = group (qName q) $ do
+        val <- liftIO $ STM.atomically $ qRead q
+        trace $ "readQueue, value: " ++ show val
+        return val
+    tryPeekQueue = qTryPeek
 
--- | Write data to the queue.
-writeQueue :: (Show a, NFData a) => WriteEnd a -> a -> Process ()
-writeQueue (WriteEnd q) val = group (qName q) $ do
-    val' <- force val
-    liftIO $ atomically $ (qWrite q) val'
-    trace $ "writeQueue, value: " ++ show val'
+instance (Show a) => ReadableQueue ReadEnd a where
+    readQueue (ReadEnd q) = readQueue q
+    tryPeekQueue (ReadEnd q) = tryPeekQueue q
 
--- | Write data to the queue (operate on Queue instead of WriteEnd)
-writeQueue' :: (Show a, NFData a) => Queue a -> a -> Process ()
-writeQueue' = writeQueue . WriteEnd
 
+class WriteableQueue q a where
+    writeQueue :: q a -> a -> Process ()
+
+instance (Show a, NFData a) => WriteableQueue Queue a where
+    writeQueue q val = group (qName q) $ do
+        val' <- force val
+        liftIO $ STM.atomically $ (qWrite q) val'
+        trace $ "writeQueue, value: " ++ show val'
+
+instance (Show a, NFData a) => WriteableQueue WriteEnd a where
+    writeQueue (WriteEnd q) val = writeQueue q val

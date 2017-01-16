@@ -25,22 +25,31 @@
 --
 -----------------------------------------------------------
 
-module Control.Concurrent.Longrun.Subprocess where
+module Control.Concurrent.Longrun.Subprocess
+( Subprocess(Subprocess)
+, spawnTask
+, waitCatch
+, spawnProcess
+, stop
+, stop_
+) where
 
-import Control.Concurrent
-import Control.Exception
-import Control.Monad.IO.Class
-import qualified Control.Concurrent.Async as A
+import Control.Concurrent (myThreadId, killThread, newEmptyMVar, takeMVar, putMVar)
+import Control.Exception (SomeException)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader.Class (asks, ask)
+import qualified Control.Concurrent.Async as A
 
 import Control.Concurrent.Longrun.Base
 
 -- | All subprocesses will automatically terminate,
 -- if the parent process terminates.
 newtype Subprocess a = Subprocess (A.Async a)
-instance Terminator (Subprocess a) where
-    getTid (Subprocess a) = A.asyncThreadId a
-    terminate (Subprocess a) = A.cancel a
+
+instance IsChild (Subprocess a) where
+    asChild (Subprocess a) = Child { childTid = A.asyncThreadId a
+                                   , terminate = A.cancel a
+                                   }
 
 -- | Spawn a child process that eventually returns something.
 -- Use waitCatch to get the returned value or error.
@@ -54,7 +63,7 @@ spawnTask name action = group name $ do
         -- Need to wait for parent to finish updating its state
         _ <- takeMVar lock
         runProcess cfg action
-    addChild $ Child (Subprocess a)
+    addChild $ asChild (Subprocess a)
     liftIO $ putMVar lock ()
     return $ Subprocess a
 
@@ -63,7 +72,7 @@ waitCatch :: Subprocess a -> Process (Either SomeException a)
 waitCatch (Subprocess a) = do
     trace "waitCatch"
     rv <- liftIO $ A.waitCatch a
-    removeChild $ Child (Subprocess a)
+    removeChild $ asChild (Subprocess a)
     return rv
 
 -- | Spawn a subprocess that shall not terminate by itself.
@@ -74,20 +83,20 @@ spawnProcess name onExit action = do
     a <- spawnTask name $ do
         cfg <- ask
         b <- liftIO $ A.async $ runProcess cfg action
-        addChild $ Child (Subprocess b)
+        addChild $ asChild (Subprocess b)
         _ <- liftIO $ A.waitCatch b
         trace $ "process terminated"
         _ <- onExit
-        removeChild $ Child (Subprocess b)
+        removeChild $ asChild (Subprocess b)
         liftIO $ Control.Concurrent.killThread parent
     return a
 
--- | Stop a subprocess, remove it from the list of childs.
+-- | Stop a subprocess, remove it from the list of children.
 -- Return running status, just before call to stop.
 stop :: Subprocess a -> Process Bool
 stop (Subprocess a) = do
     trace "stop"
-    removeChild $ Child (Subprocess a)
+    removeChild $ asChild (Subprocess a)
     liftIO $ A.cancel a
     rv <- liftIO $ A.waitCatch a
     case rv of
@@ -96,5 +105,5 @@ stop (Subprocess a) = do
 
 -- | Stop a subprocess, don't care about running state
 stop_ :: Subprocess a -> Process ()
-stop_ p = stop p >>= \_ -> return ()
+stop_ p = stop p >> return ()
 
