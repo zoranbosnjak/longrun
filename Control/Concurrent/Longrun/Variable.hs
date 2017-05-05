@@ -29,18 +29,18 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Control.Concurrent.Longrun.Variable
-( GetEnd
+( IsVar(varName, varUnbind)
+, GettableVar(getVar)
+, SettableVar(setVar)
+, GetEnd
 , SetEnd
 , Var(Var)
 , getEnd
-, getVar
 , modifyVar
 , newVar
 , newVarBind
 , onChangeVar
 , setEnd
-, setVar
-, varName
 ) where
 
 import Control.DeepSeq (NFData)
@@ -51,9 +51,6 @@ import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess (spawnProcess)
 
 data Var a = Var ProcName (STM.TVar a)
-
-varName :: Var a -> ProcName
-varName (Var name _) = name
 
 newtype GetEnd a = GetEnd (Var a)
 newtype SetEnd a = SetEnd (Var a)
@@ -77,6 +74,23 @@ newVarBind name var = group name $ do
     val <- liftIO $ STM.atomically $ STM.readTVar var
     trace $ "newVarBind, initial: " ++ show val
     return $ Var name var
+
+class IsVar v a where
+    varName :: v a -> ProcName      -- get name out of the variable
+    varUnbind :: v a -> STM.TVar a  -- get STM TVar out of the variable
+
+instance IsVar Var a where
+    varName (Var name _) = name
+    varUnbind (Var _ var) = var
+
+instance IsVar GetEnd a where
+    varName (GetEnd (Var name _)) = name
+    varUnbind (GetEnd (Var _ var)) = var
+
+instance IsVar SetEnd a where
+    varName (SetEnd (Var name _)) = name
+    varUnbind (SetEnd (Var _ var)) = var
+
 
 class GettableVar v a where
     getVar :: v a -> Process a
@@ -118,29 +132,33 @@ modifyVar (Var name var) f = group name $ do
 
 
 -- | Run single action on each variable change.
-onChangeVar :: (Eq b) =>
-    String -> b -> GetEnd a -> (a->b) -> (b -> b -> Process ()) -> Process Child
-onChangeVar procname initial (GetEnd (Var varname var)) f act = group procname $
-    do
-        trace $ "onChangeVar " ++ show varname
+onChangeVar :: (IsVar v a, Eq b) =>
+    ProcName -> b -> v a -> (a->b) -> (b -> b -> Process ()) -> Process Child
+onChangeVar procname initial var f act = group procname $ do
+    trace $ "onChangeVar " ++ show vn
 
-        -- We want to block indefinitely if variable is never changed
-        -- need another dummy thread to reference 'var',
-        -- just to prevent deadlock detection.
-        -- TODO: replace this ugly solution to keep var reference alive
-        _ <- spawnProcess "dummy" nop $ forever $ do
-            sleep $ case (var==var) of
-                True -> 1
-                False -> 2
-        p <- ungroup $ spawnProcess procname nop $ loop initial
-        return $ asChild p
-      where
-        loop x = do
-            y <- liftIO $ STM.atomically $ do
-                y <- STM.readTVar var >>= return . f
-                case y == x of
-                    True -> STM.retry
-                    False -> return y
-            trace $ "variable " ++ show varname ++ " changed, triggering action"
-            act x y
-            loop y
+    -- We want to block indefinitely if variable is never changed
+    -- need another dummy thread to reference 'var',
+    -- just to prevent deadlock detection.
+    -- TODO: replace this ugly solution to keep var reference alive
+    _ <- spawnProcess "dummy" nop $ forever $ do
+        sleep $ case (vv==vv) of
+            True -> 1
+            False -> 2
+    p <- ungroup $ spawnProcess procname nop $ loop initial
+    return $ asChild p
+
+  where
+    vn = varName var
+    vv = varUnbind var
+
+    loop x = do
+        y <- liftIO $ STM.atomically $ do
+            y <- f <$> STM.readTVar vv
+            case y == x of
+                True -> STM.retry
+                False -> return y
+        trace $ "variable " ++ show vn ++ " changed, triggering action"
+        act x y
+        loop y
+
