@@ -68,7 +68,8 @@ module Control.Concurrent.Longrun.Base
 
 import Control.Concurrent
     (ThreadId, myThreadId, killThread, threadDelay, throwTo)
-import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, modifyTVar')
+import Control.Concurrent.STM
+    (TVar, atomically, newTVarIO, readTVar, modifyTVar')
 import Control.DeepSeq (NFData, force)
 import Control.Exception
     (Exception, SomeException, bracket, evaluate, finally, mask_, try)

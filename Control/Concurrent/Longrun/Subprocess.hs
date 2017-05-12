@@ -34,7 +34,8 @@ module Control.Concurrent.Longrun.Subprocess
 , stop_
 ) where
 
-import Control.Concurrent (myThreadId, killThread, newEmptyMVar, takeMVar, putMVar)
+import Control.Concurrent
+    (myThreadId, killThread, newEmptyMVar, takeMVar, putMVar)
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader.Class (asks, ask)

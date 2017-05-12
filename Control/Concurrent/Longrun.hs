@@ -26,17 +26,12 @@
 -----------------------------------------------------------
 
 module Control.Concurrent.Longrun
-    ( readQueueTimeout
-    , module Control.Concurrent.Longrun.Base
+    ( module Control.Concurrent.Longrun.Base
     , module Control.Concurrent.Longrun.Queue
     , module Control.Concurrent.Longrun.Subprocess
     , module Control.Concurrent.Longrun.Timer
     , module Control.Concurrent.Longrun.Variable
     ) where
-
-import Control.Concurrent.Async (async, cancel)
-import Control.Monad.IO.Class (liftIO)
-import qualified Control.Concurrent.STM as STM
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
@@ -44,24 +39,3 @@ import Control.Concurrent.Longrun.Variable
 import Control.Concurrent.Longrun.Queue
 import Control.Concurrent.Longrun.Timer
 
-
--- | Return (Just msg) or Nothing on timeout.
-readQueueTimeout :: (ReadableQueue q a) => q a -> Double -> Process (Maybe a)
-readQueueTimeout q timeout = do
-    ready <- liftIO $ do
-        expired <- STM.newTVarIO False
-        task <- async $ do
-            threadDelaySec timeout
-            STM.atomically $ STM.writeTVar expired True
-        ready <- STM.atomically $ do
-            val <- tryPeekQueue q
-            end <- STM.readTVar expired
-            case (end, val) of
-                (True, _) -> return False
-                (False, Just _) -> return True
-                _ -> STM.retry
-        cancel task
-        return ready
-    case ready of
-        False -> return Nothing
-        True -> Just <$> readQueue q
