@@ -29,136 +29,78 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Control.Concurrent.Longrun.Variable
-( IsVar(varName, varUnbind)
-, GettableVar(getVar)
-, SettableVar(setVar)
-, GetEnd
-, SetEnd
-, Var(Var)
+( IsVar(..)
+, GettableVar(..)
+, GetEnd(..)
 , getEnd
-, modifyVar
+, Var(Var)
 , newVar
 , newVarBind
+, setVar
+, modifyVar
 , onChangeVar
-, setEnd
 ) where
 
-import Control.DeepSeq (NFData)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Concurrent.STM as STM
 
 import Control.Concurrent.Longrun.Base
-import Control.Concurrent.Longrun.Subprocess (spawnProcess)
 
-data Var a = Var ProcName (STM.TVar a)
+data Var a = Var (STM.TVar a)
 
 newtype GetEnd a = GetEnd (Var a)
-newtype SetEnd a = SetEnd (Var a)
 
 getEnd :: Var a -> GetEnd a
 getEnd = GetEnd
 
-setEnd :: Var a -> SetEnd a
-setEnd = SetEnd
-
 -- | Create new variable.
-newVar :: (Show a) => ProcName -> a -> Process (Var a)
-newVar name val = group name $ do
-    trace $ "newVar, initial: " ++ show val
-    var <- liftIO $ STM.newTVarIO val
-    return $ Var name var
+newVar :: a -> Process (Var a)
+newVar val = Var <$> (liftIO $ STM.newTVarIO val)
 
 -- | Bind existing TVar to a variable
-newVarBind :: (Show a) => ProcName -> (STM.TVar a) -> Process (Var a)
-newVarBind name var = group name $ do
-    val <- liftIO $ STM.atomically $ STM.readTVar var
-    trace $ "newVarBind, initial: " ++ show val
-    return $ Var name var
+newVarBind :: (STM.TVar a) -> Process (Var a)
+newVarBind = return . Var
 
 class IsVar v a where
-    varName :: v a -> ProcName      -- get name out of the variable
-    varUnbind :: v a -> STM.TVar a  -- get STM TVar out of the variable
+    vVar :: v a -> STM.TVar a
 
 instance IsVar Var a where
-    varName (Var name _) = name
-    varUnbind (Var _ var) = var
+    vVar (Var v) = v
 
 instance IsVar GetEnd a where
-    varName (GetEnd (Var name _)) = name
-    varUnbind (GetEnd (Var _ var)) = var
-
-instance IsVar SetEnd a where
-    varName (SetEnd (Var name _)) = name
-    varUnbind (SetEnd (Var _ var)) = var
-
+    vVar (GetEnd (Var v)) = v
 
 class GettableVar v a where
     getVar :: v a -> Process a
 
-instance (Show a) => GettableVar Var a where
-    getVar (Var name var) = group name $ do
-        val <- liftIO $ STM.atomically $ STM.readTVar var
-        trace $ "getVar, value: " ++ show val
-        return val
+instance GettableVar Var a where
+    getVar (Var var) = liftIO $ STM.atomically $ STM.readTVar var
 
-instance (Show a) => GettableVar GetEnd a where
+instance GettableVar GetEnd a where
     getVar (GetEnd v) = getVar v
 
-
-class SettableVar v a where
-    setVar :: v a -> a -> Process ()
-
-instance (Show a, NFData a) => SettableVar Var a where
-    setVar (Var name var) val = group name $ do
-        val' <- force val
-        trace $ "setVar, value: " ++ show val'
-        liftIO $ STM.atomically $ STM.writeTVar var val'
-
-instance (Show a, NFData a) => SettableVar SetEnd a where
-    setVar (SetEnd v) = setVar v
-
+-- | Set new value to a variable.
+setVar :: Var a -> a -> Process ()
+setVar (Var var) val = liftIO $ STM.atomically $ STM.writeTVar var val
 
 -- | Modify variable content.
-modifyVar :: (Show a, NFData a) => Var a -> (a -> a) -> Process (a,a)
-modifyVar (Var name var) f = group name $ do
-    (oldValue, newValue) <- liftIO $ STM.atomically $ do
-        a <- STM.readTVar var
-        STM.modifyTVar var f
-        b <- STM.readTVar var
-        return (a,b)
-    newValue' <- force newValue
-    trace $ "modifyVar: " ++ show oldValue ++ " -> " ++ show newValue'
-    return (oldValue, newValue')
+modifyVar :: Var a -> (a -> a) -> Process (a,a)
+modifyVar (Var var) f = liftIO $ STM.atomically $ do
+    a <- STM.readTVar var
+    STM.modifyTVar var f
+    b <- STM.readTVar var
+    return (a,b)
 
-
--- | Run single action on each variable change.
-onChangeVar :: (IsVar v a, Eq b) =>
-    ProcName -> b -> v a -> (a->b) -> (b -> b -> Process ()) -> Process Child
-onChangeVar procname initial var f act = group procname $ do
-    trace $ "onChangeVar " ++ show vn
-
-    -- We want to block indefinitely if variable is never changed
-    -- need another dummy thread to reference 'var',
-    -- just to prevent deadlock detection.
-    -- TODO: replace this ugly solution to keep var reference alive
-    _ <- spawnProcess "dummy" nop $ forever $ do
-        sleep $ case (vv==vv) of
-            True -> 1
-            False -> 2
-    p <- ungroup $ spawnProcess procname nop $ loop initial
-    return $ asChild p
-
-  where
-    vn = varName var
-    vv = varUnbind var
-
+-- | Run action on each variable change.
+onChangeVar :: (IsVar v t, Eq t)
+    => t -> v t -> (t -> t -> Process ()) -> Process ()
+onChangeVar initial var action = loop initial where
     loop x = do
         y <- liftIO $ STM.atomically $ do
-            y <- f <$> STM.readTVar vv
+            y <- STM.readTVar (vVar var)
             case y == x of
                 True -> STM.retry
                 False -> return y
-        trace $ "variable " ++ show vn ++ " changed, triggering action"
-        act x y
+        action x y
         loop y
 

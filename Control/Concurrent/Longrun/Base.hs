@@ -29,29 +29,26 @@
 
 module Control.Concurrent.Longrun.Base
 ( AppConfig (AppConfig)
-, Child (Child)
+, Child (..)
 , Control.Concurrent.Longrun.Base.bracket
 , Control.Concurrent.Longrun.Base.finally
-, Control.Concurrent.Longrun.Base.force
 , Control.Concurrent.Longrun.Base.mask_
 , Control.Concurrent.Longrun.Base.try
-, IsChild
-, Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY)
+, IsChild(..)
+, Priority(..)
 , ProcConfig (ProcConfig)
 , ProcName
 , Process
 , addChild
-, asChild
-, assert
-, childTid
-, die
+--, assert
+--, die
 , forever
 , getChildren
 , group
 , logM
 , mkChildConfig
 , nop
-, onFailureSignal
+--, onFailureSignal
 , procChildren
 , procName
 , removeChild
@@ -60,19 +57,17 @@ module Control.Concurrent.Longrun.Base
 , runAppWithConfig
 , runProcess
 , sleep
-, terminate
 , threadDelaySec
-, trace
 , ungroup
 ) where
 
-import Control.Concurrent
-    (ThreadId, myThreadId, killThread, threadDelay, throwTo)
+import Control.Concurrent (ThreadId, threadDelay)
+    --(ThreadId, myThreadId, killThread, threadDelay, throwTo)
 import Control.Concurrent.STM
     (TVar, atomically, newTVarIO, readTVar, modifyTVar')
-import Control.DeepSeq (NFData, force)
 import Control.Exception
-    (Exception, SomeException, bracket, evaluate, finally, mask_, try)
+    --(Exception, SomeException, bracket, evaluate, finally, mask_, try)
+    (Exception, bracket, finally, mask_, try)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader.Class (MonadReader, asks, local)
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
@@ -89,7 +84,7 @@ type Logger = String -> Priority -> String -> IO ()
 
 data ProcConfig = ProcConfig
     { procName      :: ProcNames
-    , procChildren    :: TVar (Set Child)
+    , procChildren  :: TVar (Set Child)
     , procLogger    :: Logger
     }
 
@@ -112,13 +107,6 @@ newtype Process a = Process (ReaderT ProcConfig IO a)
 
 newtype AppConfig = AppConfig Logger
 
-trace :: String -> Process ()
-trace = logM DEBUG
-
--- | Force expression evaluation
-force :: (NFData a) => a -> Process a
-force = liftIO . Control.Exception.evaluate . Control.DeepSeq.force
-
 -- | Forever implementation from Control.Monad in combination with transformers
 -- has some problem with memory leak, use this version instead.
 -- Make sure to keep type signature "forever :: Process () -> Process ()".
@@ -134,9 +122,7 @@ threadDelaySec sec = threadDelay $ round $ 1000000 * sec
 
 -- | Delay for a number of seconds (Process version)
 sleep :: Double -> Process ()
-sleep sec = do
-    trace $ "sleep " ++ show sec ++ " seconds"
-    liftIO $ threadDelaySec sec
+sleep sec = liftIO $ threadDelaySec sec
 
 -- Log message via logging module.
 logM :: Priority -> String -> Process ()
@@ -163,42 +149,41 @@ group name action = local f action where
 -- | Remove one level of process name.
 ungroup :: Process a -> Process a
 ungroup action = local f action where
-   f cfg = cfg {procName = drop 1 (procName cfg)}
+   f cfg = cfg {procName = tail (procName cfg)}
 
+-- | Get process children.
 getChildren :: Process [Child]
 getChildren = do
     var <- asks procChildren
     children <- liftIO $ atomically $ readTVar var
-    trace $ "getChildren, number: " ++ show (length (Set.toList children))
     return $ Set.toList children
 
-modifyChildren :: (Set Child -> Set Child) -> Process ()
-modifyChildren f = do
+_modifyChildren :: (Set Child -> Set Child) -> Process ()
+_modifyChildren f = do
     var <- asks procChildren
     liftIO $ atomically $ modifyTVar' var f
 
 -- | Add child to process config.
 addChild :: Child -> Process ()
-addChild child = do
-    trace "addChild"
-    modifyChildren $ Set.insert child
+addChild child = _modifyChildren $ Set.insert child
 
 -- | Remove child from process config.
 removeChild :: Child -> Process ()
-removeChild child = do
-    trace "removeChild"
-    modifyChildren $ Set.delete child
+removeChild child = _modifyChildren $ Set.delete child
 
+{-
 -- | Terminate self.
 die :: String -> Process ()
 die reason = do
-    trace reason
     liftIO $ (Control.Concurrent.myThreadId >>= Control.Concurrent.killThread)
+-}
 
+{-
 -- | Assert the condition is true.
 assert :: Bool -> String -> Process ()
 assert True _ = return ()
 assert False err = die $ "assertion error: " ++ err
+-}
 
 -- | Run application.
 runApp :: Process a -> IO a
@@ -210,11 +195,11 @@ runAppWithConfig (AppConfig logger) app = do
     cfg <- mkBaseConfig [] logger
     runProcess cfg app
 
--- | Run process in the IO monad
+-- | Run process in the IO monad.
 runProcess :: ProcConfig -> Process a -> IO a
 runProcess cfg (Process action) =
     process `Control.Exception.finally` cleanup
-    where
+  where
     process = runReaderT action cfg
     cleanup = do
         children <- atomically $ readTVar (procChildren cfg)
@@ -230,12 +215,11 @@ mkBaseConfig names logger = do
         , procLogger = logger
         }
 
--- | Create an empty configuration inheriting the logger
+-- | Create an empty configuration inheriting the logger.
 mkChildConfig :: ProcNames -> Process ProcConfig
 mkChildConfig names = do
-  parentLogger <- asks procLogger
-  liftIO $ mkBaseConfig names parentLogger
-
+    parentLogger <- asks procLogger
+    liftIO $ mkBaseConfig names parentLogger
 
 -- | Aquire resources, run action, release resources (bracket wrapper).
 bracket :: Process res -> (res -> Process b) -> (res -> Process c) -> Process c
@@ -274,9 +258,7 @@ nop = return ()
 
 -- Do nothing (forever).
 rest :: Process ()
-rest = do
-    trace "rest"
-    forever $ liftIO $ threadDelaySec 1
+rest = forever $ liftIO $ threadDelaySec 1
 
 -- | Protect process from being terminated while it's running.
 mask_ :: Process a -> Process a
@@ -286,6 +268,7 @@ mask_ proc = do
         mkChildConfig name
     liftIO $ Control.Exception.mask_ $ runProcess cfg proc
 
+{-
 -- | Report failure (if any) to the process
 onFailureSignal :: Process () -> ThreadId -> Process ()
 onFailureSignal action proc = do
@@ -293,4 +276,5 @@ onFailureSignal action proc = do
     case rv of
         Left e -> liftIO $ Control.Concurrent.throwTo proc (e::SomeException)
         Right _ -> return ()
+-}
 

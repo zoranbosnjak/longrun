@@ -26,6 +26,7 @@
 -----------------------------------------------------------
 
 module Control.Concurrent.Longrun.Timer
+{-
 ( Timer (Timer)
 , tParent
 , tName
@@ -37,8 +38,9 @@ module Control.Concurrent.Longrun.Timer
 , restartTimer
 , stopTimer
 , expireTimer
-) where
+) -} where
 
+{-
 import Control.Concurrent (ThreadId, myThreadId)
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
@@ -46,7 +48,9 @@ import qualified Control.Concurrent.STM as STM
 
 import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
+-}
 
+{-
 data Timer = Timer
     { tParent   :: ThreadId
     , tName     :: ProcName
@@ -129,4 +133,5 @@ expireTimer t = _manipulateTimer t $ do
         return ()
     trace $ "expireTimer, was running: " ++ show wasRunning
     return wasRunning
+-}
 
