@@ -38,6 +38,7 @@ module Control.Concurrent.Longrun.Variable
 , newVarBind
 , setVar
 , modifyVar
+, modifyVar_
 , onChangeVar
 ) where
 
@@ -62,6 +63,7 @@ newVarBind :: (STM.TVar a) -> Process (Var a)
 newVarBind = return . Var
 
 class IsVar v a where
+    -- | Get STM.TVar out of the structure.
     vVar :: v a -> STM.TVar a
 
 instance IsVar Var a where
@@ -71,15 +73,18 @@ instance IsVar GetEnd a where
     vVar (GetEnd (Var v)) = v
 
 class GettableVar v a where
+    -- | Get variable content.
     getVar :: v a -> Process a
 
+-- | Get variable content from Var.
 instance GettableVar Var a where
     getVar (Var var) = liftIO $ STM.atomically $ STM.readTVar var
 
+-- | Get variable content from GetEnd.
 instance GettableVar GetEnd a where
     getVar (GetEnd v) = getVar v
 
--- | Set new value to a variable.
+-- | Set variable content.
 setVar :: Var a -> a -> Process ()
 setVar (Var var) val = liftIO $ STM.atomically $ STM.writeTVar var val
 
@@ -90,6 +95,10 @@ modifyVar (Var var) f = liftIO $ STM.atomically $ do
     STM.modifyTVar var f
     b <- STM.readTVar var
     return (a,b)
+
+-- | Modify variable content, ignore values.
+modifyVar_ :: Var a -> (a -> a) -> Process ()
+modifyVar_ var f = modifyVar var f >> return ()
 
 -- | Run action on each variable change.
 onChangeVar :: (IsVar v t, Eq t)

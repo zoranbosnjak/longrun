@@ -37,7 +37,7 @@ module Control.Concurrent.Longrun.Base
 , IsChild(..)
 , Priority(..)
 , ProcConfig (ProcConfig)
-, ProcName
+, ProcName, ProcNames
 , Process
 , addChild
 --, assert
