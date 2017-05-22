@@ -30,13 +30,15 @@ module Control.Concurrent.Longrun.Subprocess
 , spawnTask
 , waitCatch
 , spawnProcess
+, spawnProcess_
 , stop
 , stop_
 ) where
 
 import Control.Concurrent
-    (myThreadId, killThread, newEmptyMVar, takeMVar, putMVar)
+    (myThreadId, newEmptyMVar, takeMVar, putMVar)
 import Control.Exception (SomeException)
+import Control.Concurrent (throwTo)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader.Class (asks)
 import qualified Control.Concurrent.Async as Async
@@ -77,11 +79,16 @@ waitCatch (Subprocess a) = do
 -- | Spawn a subprocess that shall not terminate by itself.
 spawnProcess :: Process () -> Process (Subprocess ())
 spawnProcess action = do
+    name <- asks procName
     parent <- liftIO $ Control.Concurrent.myThreadId
     a <- spawnTask action
     spawnTask $ do
         _ <- waitCatch a
-        liftIO $ Control.Concurrent.killThread parent
+        liftIO $ throwTo parent (ProcessTerminated name)
+
+-- | Spawn a subprocess, ignore return value.
+spawnProcess_ :: Process () -> Process ()
+spawnProcess_ action = spawnProcess action >> return ()
 
 -- | Stop a subprocess, remove it from the list of children.
 -- Return running status, just before call to stop.

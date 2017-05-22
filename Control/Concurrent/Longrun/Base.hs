@@ -38,6 +38,7 @@ module Control.Concurrent.Longrun.Base
 , Priority(..)
 , ProcConfig (ProcConfig)
 , ProcName, ProcNames
+, ProcError(..)
 , Process
 , addChild
 --, assert
@@ -71,11 +72,18 @@ import Control.Exception
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader.Class (MonadReader, asks, local)
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
+import Data.Typeable (Typeable)
 import Data.Set as Set
 import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
 import System.Log.Logger
     (Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY))
 import qualified System.Log.Logger as Log
+
+data ProcError
+    = ProcessTerminated ProcNames
+    deriving (Eq, Show, Typeable)
+
+instance Exception ProcError
 
 type ProcName = String
 type ProcNames = [ProcName]

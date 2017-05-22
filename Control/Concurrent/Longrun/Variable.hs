@@ -46,6 +46,7 @@ import Control.Monad.IO.Class (liftIO)
 import qualified Control.Concurrent.STM as STM
 
 import Control.Concurrent.Longrun.Base
+import Control.Concurrent.Longrun.Subprocess (spawnProcess_)
 
 data Var a = Var (STM.TVar a)
 
@@ -103,7 +104,10 @@ modifyVar_ var f = modifyVar var f >> return ()
 -- | Run action on each variable change.
 onChangeVar :: (IsVar v t, Eq t)
     => t -> v t -> (t -> t -> Process ()) -> Process ()
-onChangeVar initial var action = loop initial where
+onChangeVar initial var action = do
+    spawnProcess_ dummyProcess
+    loop initial
+  where
     loop x = do
         y <- liftIO $ STM.atomically $ do
             y <- STM.readTVar (vVar var)
@@ -112,4 +116,10 @@ onChangeVar initial var action = loop initial where
                 False -> return y
         action x y
         loop y
+
+    -- We need to keep 'var' reference in some other thread, to prevent
+    -- "thread blocked indefinitely in an STM transaction" error.
+    dummyProcess = forever $ do
+        _ <- liftIO $ STM.atomically $ STM.readTVar (vVar var)
+        sleep 1
 
