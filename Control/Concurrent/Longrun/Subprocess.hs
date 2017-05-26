@@ -81,8 +81,8 @@ spawnProcess :: Process () -> Process (Subprocess ())
 spawnProcess action = do
     name <- asks procName
     parent <- liftIO $ Control.Concurrent.myThreadId
-    a <- spawnTask action
     spawnTask $ do
+        a <- spawnTask action
         _ <- waitCatch a
         liftIO $ throwTo parent (ProcessTerminated name)
 
@@ -95,7 +95,7 @@ spawnProcess_ action = spawnProcess action >> return ()
 stop :: Subprocess a -> Process Bool
 stop (Subprocess a) = do
     removeChild $ asChild (Subprocess a)
-    liftIO $ Async.cancel a
+    liftIO $ terminate $ asChild (Subprocess a)
     rv <- liftIO $ Async.waitCatch a
     case rv of
         Left _ -> return True
