@@ -41,15 +41,13 @@ module Control.Concurrent.Longrun.Base
 , ProcError(..)
 , Process
 , addChild
---, assert
---, die
+, die
 , forever
 , getChildren
 , group
 , logM
 , mkChildConfig
 , nop
---, onFailureSignal
 , procChildren
 , procName
 , removeChild
@@ -62,12 +60,10 @@ module Control.Concurrent.Longrun.Base
 , ungroup
 ) where
 
-import Control.Concurrent (ThreadId, threadDelay)
-    --(ThreadId, myThreadId, killThread, threadDelay, throwTo)
+import Control.Concurrent (ThreadId, threadDelay, myThreadId, killThread)
 import Control.Concurrent.STM
     (TVar, atomically, newTVarIO, readTVar, modifyTVar')
 import Control.Exception
-    --(Exception, SomeException, bracket, evaluate, finally, mask_, try)
     (Exception, bracket, finally, mask_, try)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader.Class (MonadReader, asks, local)
@@ -179,19 +175,9 @@ addChild child = _modifyChildren $ Set.insert child
 removeChild :: Child -> Process ()
 removeChild child = _modifyChildren $ Set.delete child
 
-{-
 -- | Terminate self.
-die :: String -> Process ()
-die reason = do
-    liftIO $ (Control.Concurrent.myThreadId >>= Control.Concurrent.killThread)
--}
-
-{-
--- | Assert the condition is true.
-assert :: Bool -> String -> Process ()
-assert True _ = return ()
-assert False err = die $ "assertion error: " ++ err
--}
+die :: Process ()
+die = liftIO $ (Control.Concurrent.myThreadId >>= Control.Concurrent.killThread)
 
 -- | Run application.
 runApp :: Process a -> IO a
@@ -275,14 +261,4 @@ mask_ proc = do
         name <- asks procName
         mkChildConfig name
     liftIO $ Control.Exception.mask_ $ runProcess cfg proc
-
-{-
--- | Report failure (if any) to the process
-onFailureSignal :: Process () -> ThreadId -> Process ()
-onFailureSignal action proc = do
-    rv <- Control.Concurrent.Longrun.Base.try action
-    case rv of
-        Left e -> liftIO $ Control.Concurrent.throwTo proc (e::SomeException)
-        Right _ -> return ()
--}
 
