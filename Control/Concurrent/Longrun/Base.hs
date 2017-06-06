@@ -58,13 +58,15 @@ module Control.Concurrent.Longrun.Base
 , sleep
 , threadDelaySec
 , ungroup
+, onFailureSignal
 ) where
 
-import Control.Concurrent (ThreadId, threadDelay, myThreadId, killThread)
+import Control.Concurrent
+    (ThreadId, threadDelay, myThreadId, killThread, throwTo)
 import Control.Concurrent.STM
     (TVar, atomically, newTVarIO, readTVar, modifyTVar')
 import Control.Exception
-    (Exception, bracket, finally, mask_, try)
+    (Exception, bracket, finally, mask_, try, SomeException)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader.Class (MonadReader, asks, local)
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
@@ -261,4 +263,12 @@ mask_ proc = do
         name <- asks procName
         mkChildConfig name
     liftIO $ Control.Exception.mask_ $ runProcess cfg proc
+
+-- | Report failure (if any) to the process
+onFailureSignal :: Process () -> ThreadId -> Process ()
+onFailureSignal action proc = do
+    rv <- Control.Concurrent.Longrun.Base.try action
+    case rv of
+        Left e -> liftIO $ throwTo proc (e::SomeException)
+        Right _ -> return ()
 
