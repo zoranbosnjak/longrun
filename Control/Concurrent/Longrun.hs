@@ -30,7 +30,6 @@ module Control.Concurrent.Longrun
     , module Control.Concurrent.Longrun.Subprocess
     , module Control.Concurrent.Longrun.Variable
     , module Control.Concurrent.Longrun.Queue
-    , module Control.Concurrent.Longrun.Logging
     , module Control.Concurrent.Longrun.Timer
     ) where
 
@@ -38,6 +37,5 @@ import Control.Concurrent.Longrun.Base
 import Control.Concurrent.Longrun.Subprocess
 import Control.Concurrent.Longrun.Variable
 import Control.Concurrent.Longrun.Queue
-import Control.Concurrent.Longrun.Logging
 import Control.Concurrent.Longrun.Timer
 

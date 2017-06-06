@@ -72,10 +72,7 @@ import Control.Monad.Reader.Class (MonadReader, asks, local)
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Data.Typeable (Typeable)
 import Data.Set as Set
-import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
-import System.Log.Logger
-    (Priority(DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY))
-import qualified System.Log.Logger as Log
+import System.Log.Logger (Priority(..))
 
 data ProcError
     = ProcessTerminated ProcNames
@@ -86,7 +83,7 @@ instance Exception ProcError
 type ProcName = String
 type ProcNames = [ProcName]
 
-type Logger = String -> Priority -> String -> IO ()
+type Logger = ProcNames -> Priority -> String -> IO ()
 
 data ProcConfig = ProcConfig
     { procName      :: ProcNames
@@ -130,22 +127,12 @@ threadDelaySec sec = threadDelay $ round $ 1000000 * sec
 sleep :: Double -> Process ()
 sleep sec = liftIO $ threadDelaySec sec
 
--- Log message via logging module.
+-- Log message (call external logger).
 logM :: Priority -> String -> Process ()
 logM prio s = do
-    name <- asks procName
+    names <- asks procName
     logger <- asks procLogger
-    now <- liftIO $ Data.Time.getCurrentTime
-    liftIO $ do
-        let timeFormatUTC = "%Y-%m-%dT%H:%M:%SZ"
-            _timeFormatLocal = "%Y-%m-%dT%H:%M:%S"
-            timeFormatUnixEpoch = "%s.%q"
-        let nowUtc = formatTime defaultTimeLocale timeFormatUTC now
-            nowSec = formatTime defaultTimeLocale timeFormatUnixEpoch now
-            f [] = ""
-            f x = foldr1 (\a b -> a++"."++b) (reverse x)
-
-        logger (f name) prio $! s ++ " @ " ++ nowUtc ++ " (" ++ nowSec ++ ")"
+    liftIO $ logger names prio s
 
 -- | Raise action to a new level of process name.
 group :: ProcName -> Process a -> Process a
@@ -182,8 +169,8 @@ die :: Process ()
 die = liftIO $ (Control.Concurrent.myThreadId >>= Control.Concurrent.killThread)
 
 -- | Run application.
-runApp :: Process a -> IO a
-runApp = runAppWithConfig $ AppConfig Log.logM
+runApp :: Logger -> Process a -> IO a
+runApp logger = runAppWithConfig $ AppConfig logger
 
 -- | Run application.
 runAppWithConfig :: AppConfig -> Process a -> IO a

@@ -20,7 +20,6 @@ library
         , Control.Concurrent.Longrun.Subprocess
         , Control.Concurrent.Longrun.Variable
         , Control.Concurrent.Longrun.Queue
-        , Control.Concurrent.Longrun.Logging
         , Control.Concurrent.Longrun.Timer
     build-depends:
         base >=4.6 && <4.10
