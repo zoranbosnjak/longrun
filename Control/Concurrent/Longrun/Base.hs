@@ -35,6 +35,7 @@ module Control.Concurrent.Longrun.Base
 , Control.Concurrent.Longrun.Base.mask_
 , Control.Concurrent.Longrun.Base.try
 , IsChild(..)
+, Logger
 , Priority(..)
 , ProcConfig (ProcConfig)
 , ProcName, ProcNames
