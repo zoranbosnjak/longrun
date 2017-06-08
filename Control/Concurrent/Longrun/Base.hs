@@ -36,6 +36,8 @@ module Control.Concurrent.Longrun.Base
 , Control.Concurrent.Longrun.Base.try
 , IsChild(..)
 , Logger
+, noLogger
+, printLogger
 , Priority(..)
 , ProcConfig (ProcConfig)
 , ProcName, ProcNames
@@ -85,6 +87,14 @@ type ProcName = String
 type ProcNames = [ProcName]
 
 type Logger = ProcNames -> Priority -> String -> IO ()
+
+-- | Drop log messages.
+noLogger :: Logger
+noLogger _app _prio _msg = return ()
+
+-- | Print log messages.
+printLogger :: Logger
+printLogger app prio msg = print (app, prio, msg)
 
 data ProcConfig = ProcConfig
     { procName      :: ProcNames
