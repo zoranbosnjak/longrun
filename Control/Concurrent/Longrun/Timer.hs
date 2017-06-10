@@ -26,19 +26,15 @@
 -----------------------------------------------------------
 
 module Control.Concurrent.Longrun.Timer
-{-
-( Timer (Timer)
-, tParent
-, tName
-, tTimeout
-, tAction
-, tRunning
-, tExpired
+( Timer(..)
 , newTimer
-, restartTimer
 , stopTimer
+, stopTimer_
+, restartTimer
+, restartTimer_
 , expireTimer
-) -} where
+, expireTimer_
+) where
 
 import Control.Concurrent.MVar
 import Control.Concurrent (ThreadId, myThreadId)
