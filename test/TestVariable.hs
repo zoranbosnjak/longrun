@@ -8,7 +8,6 @@ import Utils (testLogsOfMatch)
 import qualified Control.Concurrent.Longrun as Longrun
 
 
-
 testVariable :: Test
 testVariable = testGroup "testVariable"
     [ testVar1
@@ -18,7 +17,7 @@ testVariable = testGroup "testVariable"
 -- | Basic variable
 var1 :: Longrun.Process ()
 var1 = do
-    var <- Longrun.newVar "var1" "content"
+    var <- Longrun.newVar "content"
     val1 <- Longrun.getVar var
     Longrun.logM INFO $ show val1
     Longrun.setVar var "new content"
@@ -27,11 +26,7 @@ var1 = do
 
 testVar1 :: Test
 testVar1 = testLogsOfMatch "var1" DEBUG var1
-    [ (DEBUG, "newVar, initial: \"content\"")
-    , (DEBUG, "getVar, value: \"content\"")
-    , (INFO, "\"content\"")
-    , (DEBUG, "setVar, value: \"new content\"")
-    , (DEBUG, "getVar, value: \"new content\"")
+    [ (INFO, "\"content\"")
     , (INFO, "\"new content\"")
     ]
 
@@ -39,7 +34,7 @@ testVar1 = testLogsOfMatch "var1" DEBUG var1
 -- | Modify variable
 var2 :: Longrun.Process ()
 var2 = do
-    var <- Longrun.newVar "var" (1::Int)
+    var <- Longrun.newVar (1::Int)
     (oldVal,newVal) <- Longrun.modifyVar var (+1)
     val <- Longrun.getVar var
     Longrun.logM INFO $ show oldVal
@@ -48,10 +43,7 @@ var2 = do
 
 testVar2 :: Test
 testVar2 = testLogsOfMatch "var2" DEBUG var2
-    [ (DEBUG, "newVar, initial: 1")
-    , (DEBUG, "modifyVar: 1 -> 2")
-    , (DEBUG, "getVar, value: 2")
-    , (INFO, "1")
+    [ (INFO, "1")
     , (INFO, "2")
     , (INFO, "2")
     ]

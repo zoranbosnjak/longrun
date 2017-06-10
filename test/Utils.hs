@@ -1,11 +1,9 @@
 module Utils where
 
 import Control.Exception (SomeException, catch)
-import Control.Concurrent.Longrun (Process, runAppWithConfig, AppConfig (AppConfig))
+import Control.Concurrent.Longrun (noLogger, Process, runAppWithConfig, AppConfig (AppConfig))
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Char (isSpace)
 import Data.Int (Int64)
-import Data.List (dropWhileEnd)
 import Data.Maybe (fromMaybe)
 import InMemoryLogger (inMemoryLogger, evacuateLogger, logInMemory)
 import System.Environment (lookupEnv)
@@ -19,11 +17,8 @@ import qualified System.Log.Logger as Logger
 import qualified System.Mem as Mem
 
 
-nullLogger :: String -> Logger.Priority -> String -> IO ()
-nullLogger _ _ _ = return ()
-
 runAppWithoutLogging :: Process a -> IO a
-runAppWithoutLogging = runAppWithConfig $ AppConfig nullLogger
+runAppWithoutLogging = runAppWithConfig $ AppConfig noLogger
 
 captureLogs :: Logger.Priority -> Process a -> IO ([LogRecord], Either SomeException a)
 captureLogs priority app = do
@@ -34,18 +29,10 @@ captureLogs priority app = do
     logs <- filter ((>= priority) . fst) <$> evacuateLogger logger
     return (logs, a)
 
-assertLogsWithoutTimeEqual :: [LogRecord] -> [LogRecord] -> Assertion
-assertLogsWithoutTimeEqual value expected =
-    expected @=? fmap f value where
-       f (priority, msg) = (priority, msg') where
-           msg' = dropWhileEnd isThrowaway $ dropWhileEnd (/= '@') msg
-           isThrowaway c = isSpace c || (c == '@')
-
 testLogsOfMatch :: String -> Logger.Priority -> Process () -> [LogRecord] -> Test
 testLogsOfMatch name priority proc expected = buildTest $ do
     (logs, _) <- captureLogs priority proc
-    return $ testCase name $
-        assertLogsWithoutTimeEqual logs expected
+    return $ testCase name $ expected @=? logs
 
 getUsedMemory :: IO Int64
 getUsedMemory = do
