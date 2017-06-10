@@ -12,6 +12,7 @@ testVariable :: Test
 testVariable = testGroup "testVariable"
     [ testVar1
     , testVar2
+    , testChvar
     ]
 
 -- | Basic variable
@@ -46,4 +47,25 @@ testVar2 = testLogsOfMatch "var2" DEBUG var2
     [ (INFO, "1")
     , (INFO, "2")
     , (INFO, "2")
+    ]
+
+
+-- | Variable change
+chvar :: Longrun.Process ()
+chvar = do
+    var <- Longrun.newVar (1::Int)
+    _ <- Longrun.spawnProcess $ Longrun.onChangeVar 0 var $ \oldVal newVal -> do
+        Longrun.logM INFO $ "changed: " ++ show oldVal ++ " -> " ++ show newVal
+
+    Longrun.sleep 0.1
+    Longrun.setVar var 2
+    Longrun.sleep 0.1
+    Longrun.setVar var 3
+    Longrun.sleep 0.1
+
+testChvar :: Test
+testChvar = testLogsOfMatch "variable change" INFO chvar
+    [ (INFO, "changed: 0 -> 1")
+    , (INFO, "changed: 1 -> 2")
+    , (INFO, "changed: 2 -> 3")
     ]
