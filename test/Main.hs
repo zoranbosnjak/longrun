@@ -7,7 +7,7 @@ import TestQueue (testQueue)
 -- import TestSubprocess (testSubprocess)
 import TestTimer (testTimer)
 import TestVariable (testVariable)
--- import TestWait (testWait)
+import TestWait (testWait)
 
 main :: IO ()
 main = defaultMain
@@ -16,5 +16,5 @@ main = defaultMain
     -- , testSubprocess
     , testTimer
     , testVariable
-    -- , testWait
+    , testWait
     ]

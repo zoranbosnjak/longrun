@@ -23,22 +23,20 @@ testWait = testGroup "Test task sleep"
 procTimeout :: Longrun.Process ()
 procTimeout = do
     Longrun.logM Longrun.INFO "start"
-    q <- Longrun.newQueue1 "test"
-    _ <- Longrun.spawnTask "send" $ do
-        Longrun.sleep 0.5
-        Longrun.writeQueue q "hello"
-    msg <- Longrun.readQueueTimeout 0.6 q
+    (writeEnd, readEnd) <- Longrun.newQueue1
+    _ <- Longrun.spawnTask $ do
+        Longrun.sleep 0.1
+        Longrun.logM Longrun.INFO "awoke"
+        Longrun.writeQueueBlocking writeEnd "hello"
+    Longrun.logM Longrun.INFO "spawned"
+    msg <- Longrun.readQueueTimeout 0.2 readEnd
     Longrun.logM Longrun.INFO $ show msg
 
 testTimeout :: Test
 testTimeout = testLogsOfMatch "timeout" Longrun.DEBUG procTimeout
     [ (Longrun.INFO,"start")
-    , (Longrun.DEBUG, "newQueue (bounded 1)")
-    , (Longrun.DEBUG, "spawnTask")
-    , (Longrun.DEBUG, "addChild")
-    , (Longrun.DEBUG, "sleep 0.5 seconds")
-    , (Longrun.DEBUG, "writeQueue, value: \"hello\"")
-    , (Longrun.DEBUG, "readQueueTimeout, value: Just \"hello\"")
+    , (Longrun.INFO, "spawned")
+    , (Longrun.INFO, "awoke")
     , (Longrun.INFO, "Just \"hello\"")
     ]
 
@@ -47,21 +45,21 @@ procMem = do
 
     -- case false
     do
-        q <- Longrun.newQueue1 "q"
-        t <- Longrun.spawnTask "send" $ do
+        (writeEnd, readEnd) <- Longrun.newQueue1
+        t <- Longrun.spawnTask $ do
             Longrun.sleep 0.004
-            Longrun.writeQueue q "hello"
-        msg <- Longrun.readQueueTimeout 0.003 q
+            Longrun.writeQueueBlocking writeEnd "hello"
+        msg <- Longrun.readQueueTimeout 0.003 readEnd
         _ <- Longrun.stop t
         Longrun.logM Longrun.INFO $ show msg
 
     -- case true
     do
-        q <- Longrun.newQueue1 "q"
-        t <- Longrun.spawnTask "send" $ do
+        (writeEnd, readEnd) <- Longrun.newQueue1
+        t <- Longrun.spawnTask $ do
             Longrun.sleep 0.002
-            Longrun.writeQueue q "hello"
-        msg <- Longrun.readQueueTimeout 0.003 q
+            Longrun.writeQueueBlocking writeEnd "hello"
+        msg <- Longrun.readQueueTimeout 0.003 readEnd
         _ <- Longrun.stop t
         Longrun.logM Longrun.INFO $ show msg
 
@@ -73,17 +71,11 @@ testMem = buildTest $
 
 procWriteQueueTimeout :: Longrun.Process [Bool]
 procWriteQueueTimeout = do
-    q1 <- Longrun.newQueue Nothing "q1"
-    q2 <- Longrun.newQueue (Just 2) "q2"
-    sequence
-        $  replicate 4 (writeTo q1)
-        ++ replicate 4 (writeTo q2)
-  where
-    writeTo q = Longrun.writeQueueTimeout 0.1 q ()
+    (writeEnd, _) <- Longrun.newQueue 2
+    sequence $ replicate 4 $ Longrun.writeQueueTimeout 0.01 writeEnd ()
 
 testWriteQueueTimeout :: Test
 testWriteQueueTimeout = buildTest $
     fmap (testCase "write to queue with timeout") $ do
         pattern <- runAppWithoutLogging procWriteQueueTimeout
-        return $ assertEqual "write" (replicate 6 True ++ [False,False]) pattern
-
+        return $ assertEqual "write" [True, True, False, False] pattern
