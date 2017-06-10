@@ -5,7 +5,7 @@ import Test.Framework (defaultMain)
 -- import TestLongrun (testLongrun)
 import TestQueue (testQueue)
 -- import TestSubprocess (testSubprocess)
--- import TestTimer (testTimer)
+import TestTimer (testTimer)
 import TestVariable (testVariable)
 -- import TestWait (testWait)
 
@@ -14,7 +14,7 @@ main = defaultMain
     [-- testLongrun
     testQueue
     -- , testSubprocess
-    -- , testTimer
+    , testTimer
     , testVariable
     -- , testWait
     ]
