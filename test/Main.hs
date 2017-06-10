@@ -1,8 +1,9 @@
 module Main where
 
 import Test.Framework (defaultMain)
+
 -- import TestLongrun (testLongrun)
--- import TestQueue (testQueue)
+import TestQueue (testQueue)
 -- import TestSubprocess (testSubprocess)
 -- import TestTimer (testTimer)
 import TestVariable (testVariable)
@@ -11,9 +12,9 @@ import TestVariable (testVariable)
 main :: IO ()
 main = defaultMain
     [-- testLongrun
-    -- , testQueue
+    testQueue
     -- , testSubprocess
     -- , testTimer
-    testVariable
+    , testVariable
     -- , testWait
     ]
