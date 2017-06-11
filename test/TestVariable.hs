@@ -3,8 +3,9 @@ module TestVariable (
 ) where
 
 import System.Log.Logger hiding (logM)
-import Test.Framework (testGroup, Test)
-import Utils (testLogsOfMatch)
+import Test.Framework (buildTest, testGroup, Test)
+import Test.Framework.Providers.HUnit (testCase)
+import Utils (assertConstantMemory, runAppWithoutLogging, testLogsOfMatch)
 import qualified Control.Concurrent.Longrun as Longrun
 
 
@@ -13,6 +14,7 @@ testVariable = testGroup "testVariable"
     [ testVar1
     , testVar2
     , testChvar
+    , testLongChvar
     ]
 
 -- | Basic variable
@@ -69,3 +71,19 @@ testChvar = testLogsOfMatch "variable change" INFO chvar
     , (INFO, "changed: 1 -> 2")
     , (INFO, "changed: 2 -> 3")
     ]
+
+
+testLongChvar :: Test
+testLongChvar = buildTest $ fmap (testCase "long running onChangeVar") $
+    runAppWithoutLogging $ do
+        var <- Longrun.newVar False
+        mutator <- Longrun.spawnProcess $
+            Longrun.forever $ do
+                Longrun.modifyVar_ var not
+                Longrun.sleep 0.0001
+        observer <- Longrun.spawnProcess $
+             Longrun.onChangeVar False var $ \_ _ -> return ()
+        assertion <- assertConstantMemory 100 1.2 $
+            Longrun.sleep 0.001
+        Longrun.stop_ mutator
+        return assertion
