@@ -31,7 +31,7 @@ testLong = buildTest $ fmap (testCase "long queue pipe") $
             _ <- readQueueBlocking readEnd
             sleep 0.001
 
-        assertion <- assertConstantMemory 100 3 $ do
+        assertion <- assertConstantMemory 100 1.2 $ do
             sleep 0.001
 
         stop_ _sink
