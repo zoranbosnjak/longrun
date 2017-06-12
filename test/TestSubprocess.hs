@@ -24,7 +24,6 @@ testSubprocess = testGroup "test subprocess"
     , testProcProc
     , testAutoStop1
     , testAutoStop2
-    , testTerm
     , testInLoop
     ]
 
@@ -33,7 +32,7 @@ testSubprocess = testGroup "test subprocess"
 task :: Bool -> Process ()
 task failFlag = do
     logM INFO $ "startup: " ++ show failFlag
-    t <- spawnTask "test" $ do
+    t <- spawnTask $ do
         logM INFO "task start"
         sleep 0.1
         when failFlag $ fail "fail request"
@@ -58,11 +57,12 @@ testTask2 = testLogsOfMatch "task2" INFO (task True)
 -- | Repeat running task, observe memory
 testTaskRepeat :: Test
 testTaskRepeat = buildTest $ runAppWithoutLogging $ do
-    counter <- newVar "counter" (0 :: Int64)
+    counter <- newVar (0 :: Int64)
     assertion <- assertConstantMemory 100 1.2 $ do
         cnt <- getVar counter
         setVar counter $ cnt + 1
-        t <- spawnTask ("iteration " ++ show cnt) $ do
+        t <- spawnTask $ do
+            logM INFO $ "spawned: iteration " ++ show cnt
             return cnt
         rv <- waitCatch t
         logM INFO $ show rv
@@ -78,7 +78,7 @@ testProc = testGroup "regular long running process"
 proc1 :: Process ()
 proc1 = do
     logM INFO "startup"
-    _ticker <- spawnProcess "tickerProcess" nop $ forever $ do
+    _ticker <- spawnProcess $ forever $ do
         logM INFO "tick"
         sleep 0.01
     sleep 0.095
@@ -91,7 +91,7 @@ testProcLogs = testLogsOfMatch "regular long running process" INFO proc1 $
 
 testProcMem :: Test
 testProcMem = buildTest $ runAppWithoutLogging $ do
-    _ticker <- spawnProcess "tickerProcess" nop $ forever $ do
+    _ticker <- spawnProcess $ forever $ do
         logM INFO "tick"
         sleep 0.00001
     assertion <- assertConstantMemory 100 1.2 $ do
@@ -107,11 +107,11 @@ procproc factor = do
             sleep $ delta * factor
             logM INFO $ show delta
 
-    p1 <- spawnProcess "p1" nop $ do
-        _p1a <- spawnProcess "a" nop $ forever (f 0.11)
-        _p1b <- spawnProcess "b" nop $ forever (f 0.12)
+    p1 <- spawnProcess $ do
+        _p1a <- spawnProcess $ forever (f 0.11)
+        _p1b <- spawnProcess $ forever (f 0.12)
         rest
-    p2 <- spawnProcess "p2" nop (forever (f 0.13))
+    p2 <- spawnProcess $ forever $ f 0.13
 
     sleep $ 0.3 * factor
     logM INFO "stop p1"
@@ -151,8 +151,8 @@ testProcProcMem = buildTest $ runAppWithoutLogging $
 autoStop1 :: Process ()
 autoStop1 = do
     logM INFO "start"
-    t <- spawnTask "task" $ do
-        _ <- spawnTask "subtask" $ do
+    t <- spawnTask $ do
+        _ <- spawnTask $ do
             sleep 0.002
             logM INFO "this should not be displayed"
         sleep 0.002
@@ -178,8 +178,8 @@ testAutoStop1 = testLogsOfMatch "implicit children stop" INFO autoStop1
 autoStop2 :: Process ()
 autoStop2 = do
     logM INFO "start"
-    t <- spawnTask "task" $ do
-        _ <- spawnTask "subtask" $ do
+    t <- spawnTask $ do
+        _ <- spawnTask $ do
             sleep 0.005
             logM INFO "this should not be displayed"
         sleep 0.001
@@ -200,23 +200,9 @@ testAutoStop2 = testLogsOfMatch "implicit children stop v2" INFO autoStop2
     , (INFO, "c2: 0")
     ]
 
--- | Termination
-term :: Process ()
-term = do
-    _ <- spawnProcess "proc" (logM ERROR "termination") $ do
-        logM INFO "will stop now"
-    rest
-
-testTerm :: Test
-testTerm = testLogsOfMatch "stop on sub-proc termination" INFO term
-    [ (INFO, "will stop now")
-    , (ERROR, "termination")
-    ]
-
-
 inLoop1 :: Process ()
 inLoop1 = do
-    t <- spawnTask "task" $ do
+    t <- spawnTask $ do
         sleep 0.01
         logM INFO "task done"
 
@@ -239,7 +225,7 @@ testInLoopLogs = testLogsOfMatch "logs" INFO inLoop1
 testInLoopMem :: Test
 testInLoopMem = buildTest $ fmap (testCase "constant memory" ) $
     runAppWithoutLogging $ assertConstantMemory 100 1.2 $ do
-        t <- spawnTask "task" $ do
+        t <- spawnTask $ do
             sleep 0.001
             nop
         sleep 0.00001

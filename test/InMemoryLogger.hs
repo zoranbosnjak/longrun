@@ -21,6 +21,6 @@ evacuateLogger :: InMemoryLogger -> IO [LogRecord]
 evacuateLogger logger = modifyMVar (_entries logger) $ \entries ->
   return ([], reverse entries)
 
-logInMemory :: InMemoryLogger -> String -> Priority -> String -> IO ()
+logInMemory :: InMemoryLogger -> [String] -> Priority -> String -> IO ()
 logInMemory logger _ priority msg = modifyMVar_ (_entries logger) $ \entries ->
   return $ (priority, msg) : entries

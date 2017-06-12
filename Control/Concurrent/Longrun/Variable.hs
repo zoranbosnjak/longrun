@@ -25,8 +25,9 @@
 --
 -----------------------------------------------------------
 
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Control.Concurrent.Longrun.Variable
 ( IsVar(..)
@@ -87,13 +88,13 @@ instance GettableVar GetEnd a where
 
 -- | Set variable content.
 setVar :: Var a -> a -> Process ()
-setVar (Var var) val = liftIO $ STM.atomically $ STM.writeTVar var val
+setVar (Var var) !val = liftIO $ STM.atomically $ STM.writeTVar var val
 
 -- | Modify variable content.
 modifyVar :: Var a -> (a -> a) -> Process (a,a)
 modifyVar (Var var) f = liftIO $ STM.atomically $ do
     a <- STM.readTVar var
-    STM.modifyTVar var f
+    STM.modifyTVar' var f
     b <- STM.readTVar var
     return (a,b)
 

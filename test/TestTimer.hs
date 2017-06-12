@@ -23,7 +23,7 @@ testTimer = testGroup "test timer"
 -- | Basic timer
 tim1 :: Process ()
 tim1 = do
-    t <- newTimer "timer" 0.02 $ do
+    t <- newTimer 0.02 $ do
         logM INFO "done"
     _ <- restartTimer t
     sleep 0.03
@@ -39,7 +39,7 @@ testTim1 = testLogsOfMatch "test tim1" INFO tim1
 -- | Stop/restart
 tim2 :: Process ()
 tim2 = do
-    t <- newTimer "timer" 0.1 $ do
+    t <- newTimer 0.1 $ do
         logM INFO "done"
     _ <- restartTimer t
     sleep 0.05
@@ -56,8 +56,8 @@ testTim2 = testLogsOfMatch "test tim2" INFO tim2
 -- | Check memory.
 testTimLoop :: Test
 testTimLoop = buildTest $ runAppWithoutLogging $ do
-    t <- newTimer "timer" 0.01 $ do
-        _sub <- spawnProcess "task" nop $ forever $ do
+    t <- newTimer 0.01 $ do
+        _sub <- spawnProcess $ forever $ do
             logM INFO "task"
             sleep 0.01
         sleep 0.03
@@ -65,7 +65,7 @@ testTimLoop = buildTest $ runAppWithoutLogging $ do
 
     assertion <- assertConstantMemory 100 1.2 $ do
         _ <- restartTimer t
-        nop
+        return ()
 
     return $ testCase "tim loop memory leak" assertion
 
@@ -73,7 +73,7 @@ testTimLoop = buildTest $ runAppWithoutLogging $ do
 -- | Expire timer.
 timExpire :: Process ()
 timExpire = do
-    t <- newTimer "timer" 0.02 $ do
+    t <- newTimer 0.02 $ do
         logM INFO "tick"
     logM INFO "start"
     _ <- expireTimer t
@@ -90,12 +90,11 @@ testTimExpire = testLogsOfMatch "test timExpire" INFO timExpire
     ]
 
 
-
 -- | Terminate parent.
 timException :: Process ()
 timException = do
     logM INFO "hello"
-    t <- newTimer "timer" 0.01 $ do
+    t <- newTimer 0.01 $ do
         logM INFO "expired"
         fail "terminate"
     sleep 0.001
@@ -112,7 +111,7 @@ testTimException = testLogsOfMatch "test timException" INFO timException
 
 testTimRestart :: Test
 testTimRestart = buildTest $ runAppWithoutLogging $ do
-    t <- newTimer "timer" 0.001 $ do
+    t <- newTimer 0.001 $ do
         logM INFO "tick"
 
     assertion <- assertConstantMemory 100 1.2 $ do
