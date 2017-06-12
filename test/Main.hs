@@ -13,7 +13,7 @@ main :: IO ()
 main = defaultMain
     [ testLongrun
     , testQueue
-     , testSubprocess
+    , testSubprocess
     , testTimer
     , testVariable
     , testWait

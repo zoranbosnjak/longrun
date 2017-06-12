@@ -81,7 +81,7 @@ testLongChvar = buildTest $ fmap (testCase "long running onChangeVar") $
             Longrun.forever $ do
                 Longrun.modifyVar_ var not
                 Longrun.sleep 0.0001
-        observer <- Longrun.spawnProcess $
+        Longrun.spawnProcess_ $
              Longrun.onChangeVar False var $ \_ _ -> return ()
         assertion <- assertConstantMemory 100 1.2 $
             Longrun.sleep 0.001

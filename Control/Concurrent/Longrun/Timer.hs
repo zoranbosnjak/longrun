@@ -71,10 +71,11 @@ newTimer seconds action = do
         }
 
 _withSemaphore :: Timer -> Process a -> Process a
-_withSemaphore t action = bracket takeSema releaseSema action' where
-    takeSema = liftIO $ takeMVar (tSema t)
-    releaseSema _ = liftIO $ putMVar (tSema t) ()
-    action' _ = action
+_withSemaphore t action = do
+    _ <- liftIO $ takeMVar (tSema t)
+    rv <- action
+    liftIO $ putMVar (tSema t) ()
+    return rv
 
 -- | Stop timer.
 _stopTimer :: Timer -> Process Bool
