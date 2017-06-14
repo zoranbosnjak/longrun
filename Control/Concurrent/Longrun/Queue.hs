@@ -29,99 +29,83 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module Control.Concurrent.Longrun.Queue
-( Queue
-, ReadEnd
-, ReadableQueue
-, WriteEnd
-, WriteableQueue
-, newQueue
-, newQueue1
-, queueName
-, readEnd
-, readQueue
-, tryPeekQueue
-, writeEnd
-, writeQueue
+( ReadEnd, WriteEnd
+, newQueue, newQueue1
+, IsQueue(..)
+, readQueueBlocking, readQueueTimeout
+, writeQueueBlocking, writeQueueTimeout
 ) where
 
-import Control.Concurrent.STM (STM)
 import qualified Control.Concurrent.STM as STM
-import Control.DeepSeq (NFData)
 import Control.Monad.IO.Class (liftIO)
+import Control.Concurrent.Async (async, cancel, pollSTM)
 
 import Control.Concurrent.Longrun.Base
 
-data Queue a = Queue
-    { qName     :: ProcName
-    , qRead     :: STM a
-    , qWrite    :: a -> STM ()
-    , qTryPeek  :: STM (Maybe a)
-    }
+data Queue a = Queue (STM.TBQueue a)
 
 newtype ReadEnd a = ReadEnd (Queue a)
 newtype WriteEnd a = WriteEnd (Queue a)
 
-readEnd :: Queue a -> ReadEnd a
-readEnd = ReadEnd
+-- | Create new bounded queue, return both ends of the queue.
+newQueue :: Int -> Process (WriteEnd a, ReadEnd a)
+newQueue bound = do
+    q <- Queue <$> (liftIO $ STM.newTBQueueIO bound)
+    return (WriteEnd q, ReadEnd q)
 
-writeEnd :: Queue a -> WriteEnd a
-writeEnd = WriteEnd
+newQueue1 :: Process (WriteEnd a, ReadEnd a)
+newQueue1 = newQueue 1
 
-queueName :: Queue a -> ProcName
-queueName = qName
+class IsQueue q a where
+    -- | Get STM.TBQueue out of the structure
+    qQueue :: q a -> STM.TBQueue a
 
--- | Create new queue.
-newQueue :: Maybe Int -> ProcName -> Process (Queue a)
-newQueue mBound name = group name $ case mBound of
-    Nothing -> newUnboundedQueue name
-    Just bound -> newBoundedQueue name bound
+instance IsQueue Queue a where
+    qQueue (Queue q) = q
 
-newUnboundedQueue :: ProcName -> Process (Queue a)
-newUnboundedQueue name = do
-    trace $ "newQueue (unbounded)"
-    q <- liftIO $ STM.newTQueueIO
-    return $ Queue name
-                   (STM.readTQueue q)
-                   (STM.writeTQueue q)
-                   (STM.tryPeekTQueue q)
+instance IsQueue ReadEnd a where
+    qQueue (ReadEnd (Queue q)) = q
 
-newBoundedQueue :: ProcName -> Int -> Process (Queue a)
-newBoundedQueue name bound = do
-    trace $ "newQueue (bounded " ++ show bound ++ ")"
-    q <- liftIO $ STM.newTBQueueIO bound
-    return $ Queue name
-                   (STM.readTBQueue q)
-                   (STM.writeTBQueue q)
-                   (STM.tryPeekTBQueue q)
+instance IsQueue WriteEnd a where
+    qQueue (WriteEnd (Queue q)) = q
 
--- | Create one element bounded queue.
-newQueue1 :: ProcName -> Process (Queue a)
-newQueue1 = newQueue (Just 1)
+-- | Read from queue (blocking).
+readQueueBlocking :: ReadEnd a -> Process a
+readQueueBlocking = liftIO . STM.atomically . STM.readTBQueue . qQueue
 
-class ReadableQueue q a where
-    readQueue :: q a -> Process a
-    tryPeekQueue :: q a -> STM (Maybe a)
+-- | Read from queue (with timeout).
+readQueueTimeout :: Double -> ReadEnd a -> Process (Maybe a)
+readQueueTimeout timeout q = do
+    a <- liftIO $ async $ threadDelaySec timeout
+    val <- liftIO $ STM.atomically $ do
+        to <- pollSTM a
+        mVal <- STM.tryReadTBQueue $ qQueue q
+        case mVal of
+            Just val -> return $ Just val
+            Nothing -> case to of
+                Nothing -> STM.retry
+                Just _ -> return Nothing
+    liftIO $ cancel a
+    return val
 
-instance (Show a) => ReadableQueue Queue a where
-    readQueue q = group (qName q) $ do
-        val <- liftIO $ STM.atomically $ qRead q
-        trace $ "readQueue, value: " ++ show val
-        return val
-    tryPeekQueue = qTryPeek
+-- | Write to queue (blocking).
+writeQueueBlocking :: WriteEnd a -> a -> Process ()
+writeQueueBlocking q val =
+    liftIO $ STM.atomically $ STM.writeTBQueue (qQueue q) val
 
-instance (Show a) => ReadableQueue ReadEnd a where
-    readQueue (ReadEnd q) = readQueue q
-    tryPeekQueue (ReadEnd q) = tryPeekQueue q
+-- | Write to queue (with timeout), return write success.
+writeQueueTimeout :: Double -> WriteEnd a -> a -> Process Bool
+writeQueueTimeout timeout q val = do
+    a <- liftIO $ async $ threadDelaySec timeout
+    rv <- liftIO $ STM.atomically $ do
+        expired <- pollSTM a
+        isFull <- STM.isFullTBQueue (qQueue q)
+        case isFull of
+            False -> do
+                STM.writeTBQueue (qQueue q) val
+                return True
+            True -> case expired of
+                Nothing -> STM.retry
+                Just _ -> return False
+    return rv
 
-
-class WriteableQueue q a where
-    writeQueue :: q a -> a -> Process ()
-
-instance (Show a, NFData a) => WriteableQueue Queue a where
-    writeQueue q val = group (qName q) $ do
-        val' <- force val
-        liftIO $ STM.atomically $ (qWrite q) val'
-        trace $ "writeQueue, value: " ++ show val'
-
-instance (Show a, NFData a) => WriteableQueue WriteEnd a where
-    writeQueue (WriteEnd q) val = writeQueue q val

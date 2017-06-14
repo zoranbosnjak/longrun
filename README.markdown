@@ -31,7 +31,7 @@ and then in the development shell
 
 Use regular cabal test command (cabal is already provided by nix)
 
-    cabal test [--test-option=--color] [--show-details=always] [testName]
+    cabal test -j --test-option=--color --show-details=always [testName]
 
 Some tests are repeatedly running the same code and observing for memory leaks.
 You can multiply the number of runs by setting `ITERATION_MULTIPLIER` env
