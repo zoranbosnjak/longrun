@@ -72,7 +72,7 @@ import Control.Exception
     (Exception, bracket, finally, mask_, try, SomeException)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader.Class (MonadReader, asks, local)
-import Control.Monad.Trans.Reader (ReaderT, runReaderT)
+import Control.Monad.Trans.Reader (ReaderT(ReaderT), runReaderT)
 import Data.Typeable (Typeable)
 import Data.Set as Set
 import System.Log.Logger (Priority(..))
@@ -116,7 +116,7 @@ instance Ord Child where
 class IsChild a where
     asChild :: a -> Child
 
-newtype Process a = Process (ReaderT ProcConfig IO a)
+newtype Process a = Process { unProcess :: ReaderT ProcConfig IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
 
 newtype AppConfig = AppConfig Logger
@@ -217,34 +217,25 @@ mkChildConfig names = do
 
 -- | Aquire resources, run action, release resources (bracket wrapper).
 bracket :: Process res -> (res -> Process b) -> (res -> Process c) -> Process c
-bracket aquire release action = do
-    cfg <- do
-        name <- asks procName
-        mkChildConfig name
-    let run = runProcess cfg
-        aquire' = run aquire
-        release' = run . release
-        action' = run . action
-    liftIO $ Control.Exception.bracket aquire' release' action'
+bracket acquire release action = Process (ReaderT run) where
+    run config = Control.Exception.bracket
+                    (runReaderT (unProcess acquire) config)
+                    (\res -> runReaderT (unProcess $ release res) config)
+                    (\res -> runReaderT (unProcess $ action res) config)
+
+
 
 -- | Run action, then cleanup (finally wrapper).
 finally :: Process a -> Process b -> Process a
-finally action cleanup = do
-    cfg <- do
-        name <- asks procName
-        mkChildConfig name
-    let run = runProcess cfg
-        action' = run action
-        cleanup' = run cleanup
-    liftIO $ Control.Exception.finally action' cleanup'
+finally action cleanup = Process (ReaderT run) where
+    action' = runReaderT $ unProcess action
+    cleanup' = runReaderT $ unProcess cleanup
+    run config = action' config `Control.Exception.finally` cleanup' config
 
 -- | Try to run an action (try wrapper).
 try :: Exception e => Process a -> Process (Either e a)
-try action = do
-    cfg <- do
-        name <- asks procName
-        mkChildConfig name
-    liftIO $ Control.Exception.try (runProcess cfg action)
+try (Process action) = Process (ReaderT run) where
+    run config = Control.Exception.try $ runReaderT action config
 
 -- Empty operation.
 nop :: Process ()
@@ -256,11 +247,8 @@ rest = forever $ liftIO $ threadDelaySec 1
 
 -- | Protect process from being terminated while it's running.
 mask_ :: Process a -> Process a
-mask_ proc = do
-    cfg <- do
-        name <- asks procName
-        mkChildConfig name
-    liftIO $ Control.Exception.mask_ $ runProcess cfg proc
+mask_ proc = Process $ ReaderT run where
+    run config = Control.Exception.mask_ $ runReaderT (unProcess proc) config
 
 -- | Report failure (if any) to the process
 onFailureSignal :: Process () -> ThreadId -> Process ()
