@@ -80,13 +80,14 @@ timExpire = do
     _ <- restartTimer t
     sleep 0.01
     _ <- expireTimer t
+    sleep 0.01
     logM INFO "stop"
 
 testTimExpire :: Test
 testTimExpire = testLogsOfMatch "test timExpire" INFO timExpire
     [ (INFO,  "start")
-    , (INFO,  "stop")
     , (INFO,  "tick")
+    , (INFO,  "stop")
     ]
 
 
