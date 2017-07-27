@@ -1,5 +1,5 @@
 name:                longrun
-version:             0.9.0.0
+version:             0.10.0.0
 synopsis:            Long running process support routines
 homepage:            https://github.com/zoranbosnjak/longrun
 license:             GPL-3
