@@ -27,12 +27,14 @@
 
 module Control.Concurrent.Longrun.Subprocess
 ( Subprocess(Subprocess)
+, race
 , spawnTask
 , waitCatch
 , spawnProcess
 , spawnProcess_
 , stop
 , stop_
+, withTimeout
 ) where
 
 import Control.Concurrent
@@ -53,6 +55,13 @@ instance IsChild (Subprocess a) where
         { childTid = Async.asyncThreadId a
         , terminate = Async.cancel a
         }
+
+-- | Similar to Async.race.
+race :: Process a -> Process b -> Process (Either a b)
+race p1 p2 = do
+    pName <- asks procName
+    cfg <- mkChildConfig pName
+    liftIO $ Async.race (runProcess cfg p1) (runProcess cfg p2)
 
 -- | Spawn a child process that eventually returns something.
 -- Use waitCatch to get the returned value or error.
@@ -104,3 +113,9 @@ stop (Subprocess a) = do
 -- | Stop a subprocess, don't care about running state.
 stop_ :: Subprocess a -> Process ()
 stop_ p = stop p >> return ()
+
+-- | Similar to System.Timeout.timeout.
+withTimeout :: Double -> Process a -> Process (Maybe a)
+withTimeout t action =
+    race (sleep t) action >>= return . either (const Nothing) Just
+

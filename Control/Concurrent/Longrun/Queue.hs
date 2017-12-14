@@ -30,82 +30,68 @@
 
 module Control.Concurrent.Longrun.Queue
 ( ReadEnd, WriteEnd
-, newQueue, newQueue1
+, newQueue, newUnboundedQueue, newBoundedQueue, newBoundedQueue1
 , IsQueue(..)
-, readQueueBlocking, readQueueTimeout
-, writeQueueBlocking, writeQueueTimeout
+, readQueueBlocking
+, writeQueueBlocking
 ) where
 
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.IO.Class (liftIO)
-import Control.Concurrent.Async (async, cancel, pollSTM)
 
 import Control.Concurrent.Longrun.Base
 
-data Queue a = Queue (STM.TBQueue a)
+data Queue a
+    = QueueUnbounded (STM.TQueue a)
+    | QueueBounded (STM.TBQueue a)
 
 newtype ReadEnd a = ReadEnd (Queue a)
 newtype WriteEnd a = WriteEnd (Queue a)
 
--- | Create new bounded queue, return both ends of the queue.
-newQueue :: Int -> Process (WriteEnd a, ReadEnd a)
-newQueue bound = do
-    q <- Queue <$> (liftIO $ STM.newTBQueueIO bound)
+-- | Create new queue, return both ends of the queue.
+newQueue :: Maybe Int -> Process (WriteEnd a, ReadEnd a)
+newQueue mBound = do
+    q <- case mBound of
+        Nothing -> QueueUnbounded <$> (liftIO $ STM.newTQueueIO)
+        Just bound -> QueueBounded <$> (liftIO $ STM.newTBQueueIO bound)
     return (WriteEnd q, ReadEnd q)
 
-newQueue1 :: Process (WriteEnd a, ReadEnd a)
-newQueue1 = newQueue 1
+newUnboundedQueue :: Process (WriteEnd a, ReadEnd a)
+newUnboundedQueue = newQueue Nothing
+
+newBoundedQueue :: Int -> Process (WriteEnd a, ReadEnd a)
+newBoundedQueue bound = newQueue (Just bound)
+
+newBoundedQueue1 :: Process (WriteEnd a, ReadEnd a)
+newBoundedQueue1 = newBoundedQueue 1
 
 class IsQueue q a where
-    -- | Get STM.TBQueue out of the structure
-    qQueue :: q a -> STM.TBQueue a
+    -- | Get STM.T*Queue out of the structure
+    qQueue :: q a -> Either (STM.TQueue a) (STM.TBQueue a)
 
 instance IsQueue Queue a where
-    qQueue (Queue q) = q
+    qQueue (QueueUnbounded q) = Left q
+    qQueue (QueueBounded q) = Right q
 
 instance IsQueue ReadEnd a where
-    qQueue (ReadEnd (Queue q)) = q
+    qQueue (ReadEnd (QueueUnbounded q)) = Left q
+    qQueue (ReadEnd (QueueBounded q)) = Right q
 
 instance IsQueue WriteEnd a where
-    qQueue (WriteEnd (Queue q)) = q
+    qQueue (WriteEnd (QueueUnbounded q)) = Left q
+    qQueue (WriteEnd (QueueBounded q)) = Right q
 
 -- | Read from queue (blocking).
 readQueueBlocking :: ReadEnd a -> Process a
-readQueueBlocking = liftIO . STM.atomically . STM.readTBQueue . qQueue
+readQueueBlocking = liftIO . STM.atomically . stmRead . qQueue
+  where
+    stmRead (Left stmQ) = STM.readTQueue stmQ
+    stmRead (Right stmQ) = STM.readTBQueue stmQ
 
--- | Read from queue (with timeout).
-readQueueTimeout :: Double -> ReadEnd a -> Process (Maybe a)
-readQueueTimeout timeout q = do
-    a <- liftIO $ async $ threadDelaySec timeout
-    val <- liftIO $ STM.atomically $ do
-        to <- pollSTM a
-        mVal <- STM.tryReadTBQueue $ qQueue q
-        case mVal of
-            Just val -> return $ Just val
-            Nothing -> case to of
-                Nothing -> STM.retry
-                Just _ -> return Nothing
-    liftIO $ cancel a
-    return val
-
--- | Write to queue (blocking).
+-- | Write to queue (blocking for bounded queue).
 writeQueueBlocking :: WriteEnd a -> a -> Process ()
-writeQueueBlocking q val =
-    liftIO $ STM.atomically $ STM.writeTBQueue (qQueue q) val
-
--- | Write to queue (with timeout), return write success.
-writeQueueTimeout :: Double -> WriteEnd a -> a -> Process Bool
-writeQueueTimeout timeout q val = do
-    a <- liftIO $ async $ threadDelaySec timeout
-    rv <- liftIO $ STM.atomically $ do
-        expired <- pollSTM a
-        isFull <- STM.isFullTBQueue (qQueue q)
-        case isFull of
-            False -> do
-                STM.writeTBQueue (qQueue q) val
-                return True
-            True -> case expired of
-                Nothing -> STM.retry
-                Just _ -> return False
-    return rv
+writeQueueBlocking q val = liftIO $ STM.atomically $ stmWrite (qQueue q) val
+  where
+    stmWrite (Left stmQ) = STM.writeTQueue stmQ
+    stmWrite (Right stmQ) = STM.writeTBQueue stmQ
 

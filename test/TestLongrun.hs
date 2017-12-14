@@ -20,7 +20,7 @@ testLong :: Test
 testLong = buildTest $ fmap (testCase "long queue pipe") $
     runAppWithoutLogging $ do
         stdGen <- liftIO newStdGen
-        (writeEnd, readEnd) <- newQueue1
+        (writeEnd, readEnd) <- newBoundedQueue1
 
         _src <- spawnProcess $
             forM_ (randoms stdGen :: [Int]) $ \x -> do

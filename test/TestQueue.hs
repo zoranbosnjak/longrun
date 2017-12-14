@@ -16,7 +16,7 @@ testQueue = testGroup "testQueue"
 -- | Bounded queue
 procBoundedQueue :: Process ()
 procBoundedQueue = do
-    (writeEnd, readEnd) <- newQueue1
+    (writeEnd, readEnd) <- newBoundedQueue1
     writeQueueBlocking writeEnd "a"
     readQueueBlocking readEnd >>= logM INFO
     writeQueueBlocking writeEnd "c"
