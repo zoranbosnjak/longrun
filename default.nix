@@ -5,7 +5,7 @@
 }:
 mkDerivation {
   pname = "longrun";
-  version = "0.10.0.0";
+  version = "0.12.0";
   src = ./.;
   libraryHaskellDepends = [
     async base containers deepseq hslogger mtl random stm time
