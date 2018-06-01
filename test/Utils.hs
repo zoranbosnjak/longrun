@@ -39,7 +39,7 @@ testLogsOfMatch name priority proc expected = buildTest $ do
 
 getUsedMemory :: IO Int64
 getUsedMemory = do
-    Mem.performGC  -- stats are only refresed after a GC cycle
+    Mem.performGC  -- stats are only refreshed after a GC cycle
 #if __GLASGOW_HASKELL__ < 802
     Stats.currentBytesUsed <$> Stats.getGCStats
 #else
