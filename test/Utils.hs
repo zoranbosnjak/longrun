@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 module Utils where
 
 import Control.Exception (SomeException, catch)
@@ -37,8 +39,12 @@ testLogsOfMatch name priority proc expected = buildTest $ do
 
 getUsedMemory :: IO Int64
 getUsedMemory = do
-  Mem.performGC  -- stats are only refresed after a GC cycle
-  Stats.currentBytesUsed <$> Stats.getGCStats
+    Mem.performGC  -- stats are only refreshed after a GC cycle
+#if __GLASGOW_HASKELL__ < 802
+    Stats.currentBytesUsed <$> Stats.getGCStats
+#else
+    fromIntegral . Stats.gcdetails_live_bytes . Stats.gc <$> Stats.getRTSStats
+#endif
 
 assertConstantMemory :: MonadIO m => Int64 -> Double -> m a -> m Assertion
 assertConstantMemory baseIterations maxRatio block = do
