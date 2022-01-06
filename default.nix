@@ -1,11 +1,11 @@
 { mkDerivation, async, base, containers, deepseq, hslogger, HUnit
-, mtl, QuickCheck, random, stdenv, stm, test-framework
+, lib, mtl, QuickCheck, random, stm, test-framework
 , test-framework-hunit, test-framework-quickcheck2, time
 , transformers
 }:
 mkDerivation {
   pname = "longrun";
-  version = "0.12.0";
+  version = "0.12.1";
   src = ./.;
   libraryHaskellDepends = [
     async base containers deepseq hslogger mtl random stm time
@@ -18,5 +18,5 @@ mkDerivation {
   ];
   homepage = "https://github.com/zoranbosnjak/longrun";
   description = "Long running process support routines";
-  license = stdenv.lib.licenses.gpl3;
+  license = lib.licenses.gpl3;
 }

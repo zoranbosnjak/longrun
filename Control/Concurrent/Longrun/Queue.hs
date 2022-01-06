@@ -36,6 +36,7 @@ module Control.Concurrent.Longrun.Queue
 , writeQueueBlocking
 ) where
 
+import Numeric.Natural
 import qualified Control.Concurrent.STM as STM
 import Control.Monad.IO.Class (liftIO)
 
@@ -49,7 +50,7 @@ newtype ReadEnd a = ReadEnd (Queue a)
 newtype WriteEnd a = WriteEnd (Queue a)
 
 -- | Create new queue, return both ends of the queue.
-newQueue :: Maybe Int -> Process (WriteEnd a, ReadEnd a)
+newQueue :: Maybe Natural -> Process (WriteEnd a, ReadEnd a)
 newQueue mBound = do
     q <- case mBound of
         Nothing -> QueueUnbounded <$> (liftIO $ STM.newTQueueIO)
@@ -59,7 +60,7 @@ newQueue mBound = do
 newUnboundedQueue :: Process (WriteEnd a, ReadEnd a)
 newUnboundedQueue = newQueue Nothing
 
-newBoundedQueue :: Int -> Process (WriteEnd a, ReadEnd a)
+newBoundedQueue :: Natural -> Process (WriteEnd a, ReadEnd a)
 newBoundedQueue bound = newQueue (Just bound)
 
 newBoundedQueue1 :: Process (WriteEnd a, ReadEnd a)

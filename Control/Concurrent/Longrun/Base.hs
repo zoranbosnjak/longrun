@@ -117,7 +117,7 @@ class IsChild a where
     asChild :: a -> Child
 
 newtype Process a = Process { unProcess :: ReaderT ProcConfig IO a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader ProcConfig)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadFail, MonadReader ProcConfig)
 
 newtype AppConfig = AppConfig Logger
 

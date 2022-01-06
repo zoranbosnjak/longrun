@@ -2,7 +2,6 @@ module TestQueue (
     testQueue
 ) where
 
-import System.Log.Logger (Priority(INFO))
 import Test.Framework (Test, testGroup)
 import Utils (testLogsOfMatch)
 
